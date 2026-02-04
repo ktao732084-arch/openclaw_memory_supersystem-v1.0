@@ -311,6 +311,70 @@ score < 0.05 → 移入 archive/（冷藏，不再参与检索）
 }
 ```
 
+### 处理策略：规则优先，LLM 兜底
+
+**核心原则：能用代码解决的不用 LLM，省 Token。**
+
+| Phase | 简单情况（代码） | 复杂情况（LLM） |
+|-------|-----------------|----------------|
+| Phase 1 收集 | ✅ 代码切分 | ✅ 代码切分 |
+| Phase 2 筛选 | ✅ 规则过滤 | 规则无法判断时 → LLM |
+| Phase 3 提取 | ✅ 正则/模板匹配 | 复杂语义 → LLM |
+| Phase 4a Fact | ✅ 代码去重 | ✅ 代码去重 |
+| Phase 4b Belief | ✅ 代码匹配证据 | 模糊情况 → LLM |
+| Phase 4c Summary | - | LLM 生成 |
+| Phase 5 衰减 | ✅ 代码计算 | ✅ 代码计算 |
+| Phase 6 索引 | ✅ 代码重建 | ✅ 代码重建 |
+| Phase 7 快照 | ✅ 代码生成框架 | 可选 LLM 润色 |
+
+#### Phase 2 规则过滤示例
+
+```python
+def rule_filter(content):
+    # 直接丢弃
+    if len(content) < 10:
+        return False, "太短"
+    if content.strip() in ["好的", "嗯", "OK", "好", "行"]:
+        return False, "无意义回复"
+    if is_greeting(content):
+        return False, "问候语"
+    
+    # 直接保留
+    if "记住" in content or "重要" in content:
+        return True, "用户标记重要"
+    if contains_time_reference(content):
+        return True, "时间敏感"
+    
+    # 无法判断 → 交给 LLM
+    return None, "需要 LLM 判断"
+```
+
+#### Phase 3 模板匹配示例
+
+```python
+PATTERNS = {
+    r"我是(.+)": ("fact", "identity"),
+    r"我叫(.+)": ("fact", "name"),
+    r"我喜欢(.+)": ("fact", "preference"),
+    r"(明天|下周.?)(.+)": ("fact", "schedule"),
+}
+
+def template_extract(content):
+    for pattern, (mem_type, category) in PATTERNS.items():
+        match = re.search(pattern, content)
+        if match:
+            return {"type": mem_type, "category": category, "value": match.group(1)}
+    return None  # 交给 LLM
+```
+
+#### Token 节省效果
+
+| 场景 | 纯 LLM 方案 | 规则优先方案 | 节省 |
+|------|------------|-------------|------|
+| 10 条记忆 | ~2000 tokens | ~200 tokens | 90% |
+| 50 条记忆 | ~8000 tokens | ~500 tokens | 94% |
+| 100 条记忆 | ~15000 tokens | ~800 tokens | 95% |
+
 ---
 
 ## Layer 1 快照结构

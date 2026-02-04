@@ -87,6 +87,174 @@ def now_iso():
     return datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
 
 # ============================================================
+# 混合策略：规则优先，LLM 兜底
+# ============================================================
+
+# 无意义回复列表
+SKIP_RESPONSES = {
+    "好的", "嗯", "OK", "好", "行", "可以", "知道了", "明白",
+    "ok", "嗯嗯", "哦", "噢", "收到", "了解", "懂了"
+}
+
+# 问候语列表
+GREETINGS = {
+    "你好", "您好", "早上好", "下午好", "晚上好", "早安", "晚安",
+    "hi", "hello", "hey", "嗨", "哈喽"
+}
+
+# 时间关键词
+TIME_KEYWORDS = [
+    "明天", "后天", "下周", "下个月", "今天", "昨天",
+    "周一", "周二", "周三", "周四", "周五", "周六", "周日",
+    "月底", "年底", "deadline", "截止"
+]
+
+# 模板匹配模式
+EXTRACT_PATTERNS = [
+    # 身份类
+    (r"我是(.{2,20})$", "fact", "identity"),
+    (r"我叫(.{2,10})$", "fact", "name"),
+    (r"我的名字是(.{2,10})", "fact", "name"),
+    # 偏好类
+    (r"我喜欢(.{2,30})", "fact", "preference"),
+    (r"我不喜欢(.{2,30})", "fact", "dislike"),
+    (r"我讨厌(.{2,30})", "fact", "dislike"),
+    (r"我爱(.{2,20})", "fact", "preference"),
+    # 状态类
+    (r"我在(.{2,20})工作", "fact", "work"),
+    (r"我在(.{2,20})上学", "fact", "education"),
+    (r"我是(.{2,10})专业", "fact", "major"),
+    # 时间类
+    (r"(明天|后天|下周.?|下个月)(.{2,30})", "fact", "schedule"),
+]
+
+import re
+
+def is_greeting(content):
+    """判断是否为问候语"""
+    content_lower = content.lower().strip()
+    return content_lower in GREETINGS or any(g in content_lower for g in GREETINGS)
+
+def is_pure_emoji(content):
+    """判断是否为纯表情"""
+    import unicodedata
+    stripped = content.strip()
+    if not stripped:
+        return True
+    for char in stripped:
+        if unicodedata.category(char) not in ('So', 'Sm', 'Sk', 'Sc'):
+            if not char.isspace():
+                return False
+    return True
+
+def contains_time_reference(content):
+    """判断是否包含时间引用"""
+    return any(kw in content for kw in TIME_KEYWORDS)
+
+def contains_importance_marker(content):
+    """判断是否包含重要性标记"""
+    markers = ["记住", "重要", "别忘了", "一定要", "千万", "务必"]
+    return any(m in content for m in markers)
+
+def rule_filter(content):
+    """
+    规则过滤：Phase 2 筛选的第一道防线
+    
+    返回:
+        (True, reason) - 保留
+        (False, reason) - 丢弃
+        (None, reason) - 无法判断，交给 LLM
+    """
+    content = content.strip()
+    
+    # === 直接丢弃 ===
+    if len(content) < 5:
+        return False, "内容太短"
+    
+    if content in SKIP_RESPONSES:
+        return False, "无意义回复"
+    
+    if is_greeting(content):
+        return False, "问候语"
+    
+    if is_pure_emoji(content):
+        return False, "纯表情"
+    
+    # === 直接保留 ===
+    if contains_importance_marker(content):
+        return True, "用户标记重要"
+    
+    if contains_time_reference(content):
+        return True, "时间敏感信息"
+    
+    if "我是" in content or "我叫" in content:
+        return True, "身份信息"
+    
+    if "我喜欢" in content or "我不喜欢" in content:
+        return True, "偏好信息"
+    
+    # === 无法判断 ===
+    return None, "需要 LLM 判断"
+
+def template_extract(content):
+    """
+    模板提取：Phase 3 提取的第一道防线
+    
+    返回:
+        dict - 提取成功，返回结构化数据
+        None - 无法匹配，交给 LLM
+    """
+    content = content.strip()
+    
+    for pattern, mem_type, category in EXTRACT_PATTERNS:
+        match = re.search(pattern, content)
+        if match:
+            if len(match.groups()) == 1:
+                value = match.group(1).strip()
+            else:
+                # 时间类模式有两个捕获组
+                value = f"{match.group(1)} {match.group(2)}".strip()
+            
+            return {
+                "type": mem_type,
+                "category": category,
+                "content": value,
+                "confidence": 0.9,
+                "source": "template_match",
+                "original": content
+            }
+    
+    return None  # 交给 LLM
+
+def code_verify_belief(belief, new_facts):
+    """
+    代码验证 Belief：Phase 4b 的第一道防线
+    
+    返回:
+        dict - {"action": "increase/decrease/upgrade/delete/none", "delta": float}
+    """
+    belief_content = belief.get('content', '').lower()
+    
+    for fact in new_facts:
+        fact_content = fact.get('content', '').lower()
+        
+        # 直接证据支持
+        if belief_content in fact_content or fact_content in belief_content:
+            new_confidence = belief.get('confidence', 0.5) + 0.15
+            if new_confidence > 0.85:
+                return {"action": "upgrade", "new_confidence": new_confidence}
+            return {"action": "increase", "delta": 0.15}
+        
+        # 简单矛盾检测（包含"不"的反转）
+        if f"不{belief_content}" in fact_content or f"没有{belief_content}" in fact_content:
+            new_confidence = belief.get('confidence', 0.5) - 0.25
+            if new_confidence < 0.2:
+                return {"action": "delete", "new_confidence": new_confidence}
+            return {"action": "decrease", "delta": 0.25}
+    
+    return {"action": "none"}
+
+# ============================================================
 # 初始化命令
 # ============================================================
 
