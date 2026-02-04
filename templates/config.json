@@ -1,0 +1,46 @@
+{
+  "version": "1.0",
+  "description": "Memory System 默认配置",
+  
+  "decay_rates": {
+    "fact": 0.008,
+    "belief": 0.07,
+    "summary": 0.025,
+    "_comment": "每日衰减率，fact 半衰期约 87 天，belief 约 10 天，summary 约 28 天"
+  },
+  
+  "thresholds": {
+    "archive": 0.05,
+    "summary_trigger": 3,
+    "_comment": "score < 0.05 归档；同主题 >= 3 facts 触发摘要生成"
+  },
+  
+  "token_budget": {
+    "layer1_total": 2000,
+    "layer1_top1_ratio": 0.4,
+    "layer1_top2_ratio": 0.25,
+    "layer1_top3_ratio": 0.15,
+    "layer1_rest_ratio": 0.2
+  },
+  
+  "consolidation": {
+    "schedule": "0 3 * * *",
+    "fallback_hours": 48,
+    "model": "default",
+    "_comment": "每天凌晨 3 点执行，超过 48 小时未执行则强制触发"
+  },
+  
+  "importance_rules": {
+    "identity_health_safety": 1.0,
+    "preference_relation_status": 0.8,
+    "general_fact": 0.5,
+    "temporary": 0.2
+  },
+  
+  "explicit_signals": {
+    "remember_always": 0.5,
+    "important_key": 0.3,
+    "repeat": 0.2,
+    "by_the_way": -0.2
+  }
+}
