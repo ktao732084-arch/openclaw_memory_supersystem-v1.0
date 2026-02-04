@@ -1,0 +1,11 @@
+{
+  "name": "gateway-communication",
+  "description": "Gateway双向通信技能",
+  "version": "1.0.0",
+  "author": "OpenClaw",
+  "commands": {
+    "pair-check": "检查配对状态",
+    "send-command": "发送命令到本地Gateway",
+    "get-status": "获取Gateway状态"
+  }
+}

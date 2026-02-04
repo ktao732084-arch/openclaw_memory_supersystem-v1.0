@@ -1,0 +1,32 @@
+# QQ Bot上下文管理配置 - 用户自定义版本
+qqbot_context:
+  enabled: true
+  
+  # 上下文长度配置（按用户要求）
+  context_limits:
+    max_context_length: 110000       # QQ Bot上下文最大长度
+    compression_threshold: 80000     # 开始压缩的阈值（80K）
+    new_session_threshold: 110000     # 开新会话的阈值（110K）
+    
+  # 会话管理配置
+  session_management:
+    max_history_messages: 200         # 最大历史消息数
+    session_timeout: 60              # 会话超时时间（分钟）
+    
+  # 自动化配置
+  automation:
+    auto_compress: true             # 自动压缩
+    auto_new_session: true          # 自动开新会话
+    compression_limit: 5            # 最大压缩次数
+    
+  # 存储配置
+  storage:
+    enable_persistence: true         # 启用持久化存储
+    backup_interval: 3600           # 备份间隔（秒）
+    max_backups: 10                 # 最大备份数量
+
+# 用户自定义策略：
+# - 0-80K：正常添加消息，无压缩
+# - 80K-110K：开始压缩，保留重要内容
+# - 110K以上：开启新会话
+# 这样可以在保持较长对话的同时，避免上下文过长

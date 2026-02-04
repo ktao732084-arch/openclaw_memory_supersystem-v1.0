@@ -1,0 +1,8 @@
+# 增强版QQ Bot适配配置
+qqbot_friendly:
+  enabled: true
+  enhanced_detection: true
+  multi_splitter_support: true
+  system_message_removal: true
+  code_simplification: true
+  format_cleaning: true

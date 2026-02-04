@@ -1,0 +1,10 @@
+{
+  "pairing_id": "claw-pair-001",
+  "local_instance": {
+    "enabled": true,
+    "host": "immersed-leonarda-superresponsible.ngrok-free.dev",
+    "port": 443,
+    "token": "21feb94576f168b5d6f9b17f7ca3fc7273f986e7ecf94ac9",
+    "status": "active"
+  }
+}

@@ -1,0 +1,5 @@
+# QQ Bot友好适配配置
+qqbot_friendly:
+  enabled: true
+  simplify_code_blocks: true
+  remove_system_messages: true

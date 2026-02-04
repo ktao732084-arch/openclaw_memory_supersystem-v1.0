@@ -1,0 +1,15 @@
+{
+  "name": "gateway-pairing",
+  "version": "1.0.0",
+  "description": "Gateway配对技能",
+  "commands": {
+    "pair-status": "检查配对状态",
+    "send-command": "发送命令到本地Gateway",
+    "sync-memory": "同步记忆文件"
+  },
+  "pairing_info": {
+    "pairing_id": "claw-pair-001",
+    "gateway_port": 18789,
+    "sync_dir": "/tmp/claw-sync"
+  }
+}
