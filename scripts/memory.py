@@ -16,7 +16,7 @@ import hashlib
 # ============================================================
 
 DEFAULT_CONFIG = {
-    "version": "1.1.1",
+    "version": "1.1.2",
     "decay_rates": {
         "fact": 0.008,
         "belief": 0.07,
@@ -97,12 +97,35 @@ EXPLICIT_SIGNALS = {
     }
 }
 
-# 实体识别模式
+# 实体识别模式（v1.1.2 改进：支持正则模式）
 ENTITY_PATTERNS = {
-    "person": ["我", "你", "他", "她", "用户", "Ktao", "Tkao"],
-    "project": ["项目", "系统", "工具", "应用", "App"],
-    "location": ["北京", "上海", "深圳", "广州", "杭州", "河南", "郑州"],
-    "organization": ["公司", "学校", "大学", "医院", "团队"]
+    "person": {
+        "fixed": ["我", "你", "他", "她", "用户", "Ktao", "Tkao"],
+        "patterns": [
+            r"[A-Z][a-z]+",  # 英文人名：John, Mary（移除\b）
+        ]
+    },
+    "project": {
+        "fixed": ["项目", "系统", "工具", "应用", "App"],
+        "patterns": [
+            r"项目_\d+",  # 项目_1, 项目_25
+            r"[A-Z][a-zA-Z0-9-]+",  # OpenClaw, Memory-System（移除\b）
+        ]
+    },
+    "location": {
+        "fixed": ["北京", "上海", "深圳", "广州", "杭州", "河南", "郑州"],
+        "patterns": [
+            r"城市_\d+",  # 城市_1, 城市_50
+            r"地点_\d+",  # 地点_1, 地点_50
+        ]
+    },
+    "organization": {
+        "fixed": ["公司", "学校", "大学", "医院", "团队"],
+        "patterns": [
+            r"组织_\d+",  # 组织_1, 组织_50
+            r"团队_\d+",  # 团队_1, 团队_50
+        ]
+    }
 }
 
 # 冲突覆盖信号（v1.1.1 新增）
@@ -245,16 +268,58 @@ def rule_filter(segments, threshold=0.3):
 # ============================================================
 
 def extract_entities(content):
-    """从内容中提取实体"""
+    """从内容中提取实体（v1.1.2 改进：支持正则模式）"""
+    import re
     entities = []
+    matched_positions = set()  # 记录已匹配的位置，避免重复
     
-    for entity_type, patterns in ENTITY_PATTERNS.items():
-        for pattern in patterns:
-            if pattern in content:
-                entities.append(pattern)
+    for entity_type, config in ENTITY_PATTERNS.items():
+        # 1. 固定词匹配
+        if "fixed" in config:
+            for word in config["fixed"]:
+                if word in content:
+                    entities.append(word)
+        
+        # 2. 正则模式匹配
+        if "patterns" in config:
+            for pattern in config["patterns"]:
+                for match in re.finditer(pattern, content):
+                    matched_text = match.group()
+                    start, end = match.span()
+                    
+                    # 检查是否与已匹配位置重叠
+                    if not any(start < pos < end or pos == start for pos in matched_positions):
+                        entities.append(matched_text)
+                        # 记录所有匹配位置
+                        for i in range(start, end):
+                            matched_positions.add(i)
     
-    # 去重
-    return list(set(entities))
+    # 去重并过滤
+    entities = [e for e in set(entities) if e and len(e) > 1]
+    
+    # 按长度排序，优先保留长实体
+    entities_by_length = {}
+    for e in entities:
+        length = len(e)
+        if length not in entities_by_length:
+            entities_by_length[length] = []
+        entities_by_length[length].append(e)
+    
+    # 过滤：如果短实体是长实体的子串，移除短实体
+    final_entities = []
+    sorted_entities = sorted(entities, key=len, reverse=True)
+    
+    for entity in sorted_entities:
+        # 检查是否是其他实体的子串
+        is_substring = False
+        for other in final_entities:
+            if entity in other and entity != other:
+                is_substring = True
+                break
+        if not is_substring:
+            final_entities.append(entity)
+    
+    return final_entities
 
 def classify_memory_type(content, importance):
     """
