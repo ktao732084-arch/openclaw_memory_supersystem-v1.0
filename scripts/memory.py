@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Memory System v1.0 - 三层记忆架构 CLI
+Memory System v1.1.3 - 三层记忆架构 CLI
+支持 LLM 兜底机制
 """
 
 import os
@@ -10,13 +11,90 @@ import argparse
 from datetime import datetime, timedelta
 from pathlib import Path
 import hashlib
+import re
+
+# ============================================================
+# LLM 调用模块（v1.1.3 新增）
+# ============================================================
+
+def get_llm_config():
+    """从环境变量获取 LLM 配置"""
+    return {
+        "api_key": os.environ.get("OPENAI_API_KEY"),
+        "base_url": os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+        "model": os.environ.get("MEMORY_LLM_MODEL", "gpt-3.5-turbo"),
+        "enabled": os.environ.get("MEMORY_LLM_ENABLED", "true").lower() == "true"
+    }
+
+def call_llm(prompt, system_prompt=None, max_tokens=500):
+    """
+    调用 LLM（使用用户的 API Key）
+    
+    返回: (success: bool, result: str, error: str)
+    """
+    config = get_llm_config()
+    
+    # 检查是否启用 LLM
+    if not config["enabled"]:
+        return False, None, "LLM fallback disabled"
+    
+    # 检查 API Key
+    if not config["api_key"]:
+        return False, None, "OPENAI_API_KEY not found in environment"
+    
+    try:
+        import requests
+        
+        headers = {
+            "Authorization": f"Bearer {config['api_key']}",
+            "Content-Type": "application/json"
+        }
+        
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+        
+        data = {
+            "model": config["model"],
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "temperature": 0.3
+        }
+        
+        response = requests.post(
+            f"{config['base_url']}/chat/completions",
+            headers=headers,
+            json=data,
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            content = result["choices"][0]["message"]["content"]
+            
+            # 统计 token 使用
+            usage = result.get("usage", {})
+            LLM_STATS["total_tokens"] += usage.get("total_tokens", 0)
+            
+            return True, content.strip(), None
+        else:
+            LLM_STATS["errors"] += 1
+            return False, None, f"API error: {response.status_code}"
+            
+    except ImportError:
+        LLM_STATS["errors"] += 1
+        return False, None, "requests library not installed"
+    except Exception as e:
+        LLM_STATS["errors"] += 1
+        return False, None, f"LLM call failed: {str(e)}"
 
 # ============================================================
 # 配置
 # ============================================================
 
 DEFAULT_CONFIG = {
-    "version": "1.1.2",
+    "version": "1.1.3",
     "decay_rates": {
         "fact": 0.008,
         "belief": 0.07,
@@ -35,6 +113,13 @@ DEFAULT_CONFIG = {
     "conflict_detection": {
         "enabled": True,
         "penalty": 0.2
+    },
+    "llm_fallback": {
+        "enabled": True,
+        "phase2_filter": True,
+        "phase3_extract": True,
+        "phase4b_verify": False,
+        "min_confidence": 0.6
     }
 }
 
@@ -137,6 +222,14 @@ OVERRIDE_SIGNALS = [
 # 冲突降权系数
 CONFLICT_PENALTY = 0.2
 
+# LLM 调用统计（v1.1.3 新增）
+LLM_STATS = {
+    "phase2_calls": 0,
+    "phase3_calls": 0,
+    "total_tokens": 0,
+    "errors": 0
+}
+
 # ============================================================
 # 工具函数
 # ============================================================
@@ -235,33 +328,107 @@ def calculate_importance(content):
     
     return final_score, category
 
-def rule_filter(segments, threshold=0.3):
+def rule_filter(segments, threshold=0.3, use_llm_fallback=True):
     """
-    Phase 2: 重要性筛选
+    Phase 2: 重要性筛选（v1.1.3：支持 LLM 兜底）
     输入: 语义片段列表
     输出: 筛选后的重要片段列表（带 importance 标注）
     
-    规则优先，无需 LLM 调用
+    规则优先，LLM 兜底
     """
+    config = get_config()
+    llm_enabled = config.get("llm_fallback", {}).get("enabled", True) and use_llm_fallback
+    phase2_llm = config.get("llm_fallback", {}).get("phase2_filter", True)
+    
     filtered = []
+    uncertain_segments = []  # 规则无法判断的片段
     
     for segment in segments:
         content = segment.get("content", "") if isinstance(segment, dict) else segment
         
-        # 计算重要性
+        # 1. 规则判断
         importance, category = calculate_importance(content)
         
-        # 筛选
+        # 2. 明确判断（高于阈值或低于阈值很多）
         if importance >= threshold:
             result = {
                 "content": content,
                 "importance": importance,
                 "category": category,
-                "source": segment.get("source", "unknown") if isinstance(segment, dict) else "unknown"
+                "source": segment.get("source", "unknown") if isinstance(segment, dict) else "unknown",
+                "method": "rule"
             }
             filtered.append(result)
+        elif importance < threshold - 0.1:
+            # 明确丢弃（低于阈值 0.1 以上）
+            pass
+        else:
+            # 3. 不确定（在阈值附近 ±0.1）→ 交给 LLM
+            if llm_enabled and phase2_llm:
+                uncertain_segments.append((segment, content, importance, category))
+    
+    # 4. LLM 兜底处理不确定的片段
+    if uncertain_segments and llm_enabled and phase2_llm:
+        for segment, content, rule_importance, category in uncertain_segments:
+            llm_result = llm_filter_segment(content)
+            if llm_result:
+                importance = llm_result.get("importance", rule_importance)
+                if importance >= threshold:
+                    result = {
+                        "content": content,
+                        "importance": importance,
+                        "category": llm_result.get("category", category),
+                        "source": segment.get("source", "unknown") if isinstance(segment, dict) else "unknown",
+                        "method": "llm"
+                    }
+                    filtered.append(result)
     
     return filtered
+
+def llm_filter_segment(content):
+    """
+    使用 LLM 判断片段重要性
+    
+    返回: {"importance": float, "category": str} 或 None
+    """
+    LLM_STATS["phase2_calls"] += 1
+    
+    system_prompt = """你是一个记忆重要性评估专家。
+评估用户输入的重要性（0-1），并分类。
+
+分类标准：
+- identity_health_safety (1.0): 身份、健康、安全相关
+- preference_relation_status (0.8): 偏好、关系、状态变更
+- project_task_goal (0.7): 项目、任务、目标
+- general_fact (0.5): 一般事实
+- temporary (0.2): 临时信息
+
+返回 JSON 格式：
+{"importance": 0.8, "category": "preference_relation_status", "reason": "简短理由"}"""
+
+    prompt = f"""评估以下内容的重要性：
+
+内容：{content}
+
+返回 JSON："""
+
+    success, result, error = call_llm(prompt, system_prompt, max_tokens=100)
+    
+    if success:
+        try:
+            # 尝试解析 JSON
+            import re
+            json_match = re.search(r'\{[^}]+\}', result)
+            if json_match:
+                data = json.loads(json_match.group())
+                return {
+                    "importance": float(data.get("importance", 0.5)),
+                    "category": data.get("category", "general_fact")
+                }
+        except:
+            pass
+    
+    return None
 
 # ============================================================
 # Phase 3: 深度提取 - template_extract()
@@ -343,13 +510,17 @@ def classify_memory_type(content, importance):
     # 默认 → fact
     return "fact"
 
-def template_extract(filtered_segments):
+def template_extract(filtered_segments, use_llm_fallback=True):
     """
-    Phase 3: 深度提取
+    Phase 3: 深度提取（v1.1.3：支持 LLM 兜底）
     将筛选后的片段转为结构化 facts/beliefs
     
-    模板匹配优先，无需 LLM 调用
+    模板匹配优先，LLM 兜底
     """
+    config = get_config()
+    llm_enabled = config.get("llm_fallback", {}).get("enabled", True) and use_llm_fallback
+    phase3_llm = config.get("llm_fallback", {}).get("phase3_extract", True)
+    
     extracted = {
         "facts": [],
         "beliefs": [],
@@ -360,33 +531,83 @@ def template_extract(filtered_segments):
         content = segment["content"]
         importance = segment["importance"]
         source = segment.get("source", "unknown")
+        method = segment.get("method", "rule")
         
-        # 判断类型
+        # 1. 规则提取
         mem_type = classify_memory_type(content, importance)
-        
-        # 提取实体
         entities = extract_entities(content)
         
-        # 构建记录
+        # 2. 如果实体为空且启用 LLM，尝试 LLM 提取
+        if not entities and llm_enabled and phase3_llm:
+            llm_result = llm_extract_entities(content)
+            if llm_result:
+                entities = llm_result.get("entities", [])
+                # 可能更新 mem_type
+                if "type" in llm_result:
+                    mem_type = llm_result["type"]
+        
+        # 3. 构建记录
         record = {
             "id": generate_id(mem_type[0], content),
             "content": content,
             "importance": importance,
-            "score": importance,  # 初始 score = importance
+            "score": importance,
             "entities": entities,
             "created": now_iso(),
-            "source": source
+            "source": source,
+            "extract_method": method
         }
         
         # belief 需要额外字段
         if mem_type == "belief":
-            record["confidence"] = 0.6  # 默认置信度
+            record["confidence"] = 0.6
             record["basis"] = f"从对话推断: {content[:50]}..."
         
         # 分类存储
         extracted[f"{mem_type}s"].append(record)
     
     return extracted
+
+def llm_extract_entities(content):
+    """
+    使用 LLM 提取实体和记忆类型
+    
+    返回: {"entities": [...], "type": "fact/belief"} 或 None
+    """
+    LLM_STATS["phase3_calls"] += 1
+    
+    system_prompt = """你是一个实体提取专家。
+从用户输入中提取关键实体（人物、地点、项目、组织等）。
+
+返回 JSON 格式：
+{"entities": ["实体1", "实体2"], "type": "fact", "reason": "简短理由"}
+
+type 可选值：
+- fact: 确定的事实
+- belief: 推断或不确定的信息"""
+
+    prompt = f"""从以下内容中提取实体：
+
+内容：{content}
+
+返回 JSON："""
+
+    success, result, error = call_llm(prompt, system_prompt, max_tokens=150)
+    
+    if success:
+        try:
+            import re
+            json_match = re.search(r'\{[^}]+\}', result)
+            if json_match:
+                data = json.loads(json_match.group())
+                return {
+                    "entities": data.get("entities", []),
+                    "type": data.get("type", "fact")
+                }
+        except:
+            pass
+    
+    return None
 
 # ============================================================
 # Phase 4a: Facts 去重合并
@@ -1684,6 +1905,17 @@ def cmd_consolidate(args):
         
         print("\n" + "=" * 40)
         print("✅ Consolidation 完成!")
+        
+        # 显示 LLM 统计（v1.1.3 新增）
+        if LLM_STATS["phase2_calls"] > 0 or LLM_STATS["phase3_calls"] > 0:
+            print("\n📊 LLM 调用统计:")
+            print(f"   Phase 2 (筛选): {LLM_STATS['phase2_calls']} 次")
+            print(f"   Phase 3 (提取): {LLM_STATS['phase3_calls']} 次")
+            print(f"   总 Token: {LLM_STATS['total_tokens']}")
+            if LLM_STATS["errors"] > 0:
+                print(f"   ⚠️  错误: {LLM_STATS['errors']} 次")
+        else:
+            print("\n💰 Token 节省: 100% (纯规则处理，无 LLM 调用)")
         
     except Exception as e:
         state['retry_count'] = state.get('retry_count', 0) + 1

@@ -1,5 +1,46 @@
 # Changelog
 
+## [v1.1.3] - 2026-02-05
+
+### ✨ Feature - LLM 兜底机制
+- **规则优先，LLM 兜底**: 实现完整的混合动力架构
+  - Phase 2 (筛选): 规则无法判断时（阈值附近 ±0.1），自动调用 LLM
+  - Phase 3 (提取): 实体为空时，自动调用 LLM 提取
+  - 使用用户的 API Key（从 `os.environ` 读取 `OPENAI_API_KEY`）
+  - 支持自定义模型（`MEMORY_LLM_MODEL` 环境变量）
+  - 支持自定义 Base URL（`OPENAI_BASE_URL` 环境变量）
+
+### 📊 Monitoring
+- **LLM 调用统计**: Consolidation 结束时显示
+  - Phase 2/3 调用次数
+  - 总 Token 消耗
+  - 错误次数
+  - 纯规则处理时显示"Token 节省: 100%"
+
+### 🔧 Configuration
+- 新增配置项：
+  ```json
+  "llm_fallback": {
+    "enabled": true,
+    "phase2_filter": true,
+    "phase3_extract": true,
+    "phase4b_verify": false,
+    "min_confidence": 0.6
+  }
+  ```
+
+### 🎯 Token 节省效果
+- 简单场景（规则可处理）: 100% 节省（0 Token）
+- 复杂场景（需要 LLM）: 仅在必要时调用，节省 ~90%
+
+### 📝 环境变量
+- `OPENAI_API_KEY`: OpenAI API Key（必需，如果启用 LLM）
+- `OPENAI_BASE_URL`: API Base URL（可选，默认 OpenAI 官方）
+- `MEMORY_LLM_MODEL`: 模型名称（可选，默认 gpt-3.5-turbo）
+- `MEMORY_LLM_ENABLED`: 是否启用 LLM（可选，默认 true）
+
+---
+
 ## [v1.1.2] - 2026-02-05
 
 ### 🔧 Hotfix
