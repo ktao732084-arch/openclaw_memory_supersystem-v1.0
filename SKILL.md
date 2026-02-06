@@ -1,7 +1,7 @@
 ---
 name: memory-system
-version: 1.0.0
-description: 三层记忆架构系统，模拟人类记忆机制。自动提取、结构化存储、智能衰减、动态快照。让 AI Agent 拥有真正的长期记忆。
+version: 1.1.7
+description: 三层记忆架构系统，模拟人类记忆机制。自动提取、结构化存储、智能衰减、动态快照。v1.1.7 新增 LLM 深度集成、语义复杂度检测、智能触发策略。
 metadata:
   clawdbot:
     emoji: "🧠"
@@ -14,7 +14,7 @@ metadata:
         label: "初始化记忆系统目录结构"
 ---
 
-# Memory System v1.0 — 三层记忆架构
+# Memory System v1.1.7 — 三层记忆架构
 
 > **让 AI 从金鱼变成大象。**
 
@@ -24,6 +24,8 @@ metadata:
 - 🎯 **智能衰减**：重要信息永不遗忘，琐碎信息自然淡化
 - 📊 **结构化存储**：Facts / Beliefs / Summaries 分类管理
 - 🔍 **高效检索**：多维索引，毫秒级响应
+- 🔥 **访问追踪**（v1.1）：常用记忆权重更高
+- ⏰ **时间敏感**（v1.1）：自动识别和清理过期信息
 
 ---
 
@@ -311,70 +313,6 @@ score < 0.05 → 移入 archive/（冷藏，不再参与检索）
 }
 ```
 
-### 处理策略：规则优先，LLM 兜底
-
-**核心原则：能用代码解决的不用 LLM，省 Token。**
-
-| Phase | 简单情况（代码） | 复杂情况（LLM） |
-|-------|-----------------|----------------|
-| Phase 1 收集 | ✅ 代码切分 | ✅ 代码切分 |
-| Phase 2 筛选 | ✅ 规则过滤 | 规则无法判断时 → LLM |
-| Phase 3 提取 | ✅ 正则/模板匹配 | 复杂语义 → LLM |
-| Phase 4a Fact | ✅ 代码去重 | ✅ 代码去重 |
-| Phase 4b Belief | ✅ 代码匹配证据 | 模糊情况 → LLM |
-| Phase 4c Summary | - | LLM 生成 |
-| Phase 5 衰减 | ✅ 代码计算 | ✅ 代码计算 |
-| Phase 6 索引 | ✅ 代码重建 | ✅ 代码重建 |
-| Phase 7 快照 | ✅ 代码生成框架 | 可选 LLM 润色 |
-
-#### Phase 2 规则过滤示例
-
-```python
-def rule_filter(content):
-    # 直接丢弃
-    if len(content) < 10:
-        return False, "太短"
-    if content.strip() in ["好的", "嗯", "OK", "好", "行"]:
-        return False, "无意义回复"
-    if is_greeting(content):
-        return False, "问候语"
-    
-    # 直接保留
-    if "记住" in content or "重要" in content:
-        return True, "用户标记重要"
-    if contains_time_reference(content):
-        return True, "时间敏感"
-    
-    # 无法判断 → 交给 LLM
-    return None, "需要 LLM 判断"
-```
-
-#### Phase 3 模板匹配示例
-
-```python
-PATTERNS = {
-    r"我是(.+)": ("fact", "identity"),
-    r"我叫(.+)": ("fact", "name"),
-    r"我喜欢(.+)": ("fact", "preference"),
-    r"(明天|下周.?)(.+)": ("fact", "schedule"),
-}
-
-def template_extract(content):
-    for pattern, (mem_type, category) in PATTERNS.items():
-        match = re.search(pattern, content)
-        if match:
-            return {"type": mem_type, "category": category, "value": match.group(1)}
-    return None  # 交给 LLM
-```
-
-#### Token 节省效果
-
-| 场景 | 纯 LLM 方案 | 规则优先方案 | 节省 |
-|------|------------|-------------|------|
-| 10 条记忆 | ~2000 tokens | ~200 tokens | 90% |
-| 50 条记忆 | ~8000 tokens | ~500 tokens | 94% |
-| 100 条记忆 | ~15000 tokens | ~800 tokens | 95% |
-
 ---
 
 ## Layer 1 快照结构
@@ -412,6 +350,55 @@ def template_extract(content):
 [完整记忆库: 156 条 | 实体: 23 个 | 主题: 12 类]
 使用 memory_search 检索详细信息
 ```
+
+---
+
+## ⚠️ LLM 配置（重要）
+
+v1.1.7 引入了 LLM 深度集成，需要配置 API Key 才能启用智能功能。
+
+### 配置 API Key
+
+```bash
+# 方法 1: 环境变量（推荐）
+export OPENAI_API_KEY="sk-your-api-key-here"
+
+# 方法 2: 在 .bashrc 或 .zshrc 中永久配置
+echo 'export OPENAI_API_KEY="sk-your-api-key-here"' >> ~/.bashrc
+source ~/.bashrc
+
+# 方法 3: 在 config.json 中配置
+# memory/config.json
+{
+  "llm_api_key": "sk-your-api-key-here",
+  ...
+}
+```
+
+### 可选配置
+
+```bash
+# 自定义 API Base URL（用于代理或兼容 API）
+export OPENAI_BASE_URL="https://api.openai.com/v1"
+
+# 自定义模型（默认 gpt-4o-mini）
+export MEMORY_LLM_MODEL="gpt-4o-mini"
+
+# 禁用 LLM（纯规则模式）
+export MEMORY_LLM_ENABLED="false"
+```
+
+### LLM 功能说明
+
+| 功能 | 无 API Key | 有 API Key |
+|------|-----------|-----------|
+| 规则筛选 | ✅ 正常工作 | ✅ 正常工作 |
+| 语义复杂度检测 | ✅ 正常工作 | ✅ 正常工作 |
+| 复杂内容深度理解 | ❌ 回退到规则 | ✅ LLM 增强 |
+| 实体提取 | ⚠️ 仅规则匹配 | ✅ LLM 补充 |
+| 冲突检测 | ⚠️ 仅关键词匹配 | ✅ 语义理解 |
+
+> **注意**：即使没有配置 API Key，系统也能正常工作（回退到纯规则模式）。LLM 是增强功能，不是必需的。
 
 ---
 
@@ -603,113 +590,6 @@ python3 scripts/memory.py archive <memory_id>
 
 ---
 
-## Router 逻辑：检索触发与注入策略
-
-### 触发条件体系
-
-检索采用分层触发，低成本规则先行，高成本语义后备：
-
-| 层级 | 触发条件 | 成本 | 示例 |
-|------|---------|------|------|
-| Layer 0 | 显式请求、时间引用 | O(1) | "你还记得..."、"上周我说的..." |
-| Layer 1 | 大事件命中、关键词匹配 | O(n) | 命中 Top 记忆关键词 |
-| Layer 2 | 任务类型映射 | O(1) | 特定任务自动关联记忆类型 |
-| Layer 3 | 语义匹配（仅兜底） | O(n) | 以上都未命中时才触发 |
-
-### 检索策略：检索宽，注入窄
-
-根据查询类型，采用不同的检索数量配置：
-
-| 查询类型 | 初始检索 | 重排后 | 最终注入 | 适用场景 |
-|---------|---------|--------|---------|---------|
-| 精准查询 | 12-15 条 | 8-10 条 | 5-8 条 | 特定事实查询 |
-| 主题查询 | 20-25 条 | 13-16 条 | 10-13 条 | 某主题相关信息 |
-| 广度查询 | 30-35 条 | 20-25 条 | 15-18 条 | 全面了解某领域 |
-
-### 结果注入规则
-
-根据置信度决定注入方式：
-
-| 置信度 | 注入方式 | 示例 |
-|--------|---------|------|
-| **>0.8** | 直接注入，无标记 | "用户是医学生" |
-| **0.5-0.8** | 注入 + 来源标记 | "用户可能对神经科学感兴趣 [belief, 0.7]" |
-| **<0.5** | 仅提供引用路径 | "相关记忆: fact_20260204_a1b2c3" |
-
-### 其他机制
-
-| 机制 | 说明 |
-|------|------|
-| **自评估** | 检索后评估结果充分性，必要时补充检索 |
-| **会话缓存** | 同一会话内缓存检索结果，TTL 30分钟 |
-| **Token预算** | 根据剩余预算动态计算 Top-K |
-
----
-
-## Layer 1 Token 分配策略
-
-### 结构与预算
-
-Layer 1 快照控制在 ~2000 tokens，按以下结构分配：
-
-| 区块 | Token 预算 | 更新频率 | 说明 |
-|------|-----------|---------|------|
-| Identity | ~100 | 固定 | Agent 身份信息 |
-| Owner | ~150 | 固定 | 用户基本信息 |
-| Constraints | ~100 | 固定 | 隐私边界、交互约束 |
-| Top Summaries | ~800-1500 | 动态 | 按排名分配，核心记忆 |
-| Ranked Index | ~600-1500 | 动态 | 按排名分配，记忆索引 |
-| Recent | ~200 | 动态 | 最近 24-72h 要点 |
-
-### 排名与丰富度分配
-
-**核心原则：排名靠前 → 丰富度高（不是反过来）**
-
-| 排名 | Token 分配 | 内容丰富度 |
-|------|-----------|-----------|
-| #1 | 40% | 完整内容 + 上下文 + 关联 |
-| #2 | 25% | 完整内容 + 关键上下文 |
-| #3 | 15% | 核心内容 |
-| #4+ | 20%（共享） | 简洁摘要或仅指针 |
-
-### 排名权重公式
-
-```python
-排名分数 = 基础权重 × 时间衰减 + 访问频率加成 + 重要性加成
-
-# 其中：
-# - 基础权重 = importance (0-1)
-# - 时间衰减 = e^(-λ × days)
-# - 访问频率加成 = log(access_count + 1) × 0.1  # v1.1 计划
-# - 重要性加成 = importance × 0.2
-```
-
----
-
-## 完整衰减率配置
-
-| 类型 | 衰减率 (λ) | 半衰期 | 设计理由 |
-|------|-----------|--------|---------|
-| **Fact** | 0.008 | ~87天 | 事实相对稳定，长期保留 |
-| **Belief** | 0.07 | ~10天 | 推断需快速验证或遗忘 |
-| **Summary** | 0.025 | ~28天 | 摘要有中等时效性 |
-| **Event** | 0.15 | ~5天 | 原始事件快速衰减 |
-
-### 重要性保护
-
-高重要性的记忆衰减更慢：
-
-```python
-actual_decay = base_decay × (1 - importance × 0.5)
-
-# 示例：
-# importance=1.0 的 Fact: actual_decay = 0.008 × 0.5 = 0.004 (半衰期 ~173天)
-# importance=0.5 的 Fact: actual_decay = 0.008 × 0.75 = 0.006 (半衰期 ~115天)
-# importance=0.0 的 Fact: actual_decay = 0.008 × 1.0 = 0.008 (半衰期 ~87天)
-```
-
----
-
 ## 设计亮点
 
 ### 1. 认知科学启发
@@ -750,20 +630,49 @@ actual_decay = base_decay × (1 - importance × 0.5)
 
 ---
 
-## 路线图
+## 版本历史
 
-### v1.0（当前）
+### v1.1.7（当前）
+- [x] LLM 深度集成：语义复杂度检测 + 智能触发 + 失败回退
+- [x] 扩大 LLM 触发区间：0.2~0.5（原 0.2~0.3）
+- [x] API Key 多源获取：环境变量 → 配置文件 → 参数传入
+- [x] 复杂内容强制 LLM 复核
+
+### v1.1.6
+- [x] 引号实体提取（优先级最高）
+- [x] 分层冲突信号（Tier 1/2）
+- [x] 去重阈值改用相对比例（30%）
+- [x] 中文分词优化
+
+### v1.1.5
+- [x] 三层实体识别（硬编码 → 学习 → LLM）
+- [x] 竞争性抑制（相似实体降权）
+- [x] 访问加成修复（最近 N 天）
+
+### v1.1.4
+- [x] 访问日志追踪
+- [x] 时间敏感记忆
+
+### v1.1.3
+- [x] LLM 兜底机制
+
+### v1.1.0
+- [x] Router 检索系统
+- [x] Consolidation 完整流程
+
+### v1.0.0
 - [x] 三层架构设计
 - [x] Consolidation 7 Phase 流程
 - [x] 重要性评分机制
 - [x] 衰减和归档机制
-- [ ] 核心脚本实现
-- [ ] 测试和验证
 
-### v1.1（计划）
-- [ ] 访问记录和访问加权
-- [ ] 归档内容激活机制
-- [ ] 从现有 MEMORY.md 迁移工具
+## 路线图
+
+### v1.2（计划）
+- [ ] IO 竞态：切换 SQLite 后端
+- [ ] 冷启动优化：模块合并/延迟加载
+- [ ] 增量索引更新
+- [ ] 整合期实体抑制
 
 ### v2.0（远期）
 - [ ] 语义嵌入增强检索
@@ -777,6 +686,7 @@ actual_decay = base_decay × (1 - importance × 0.5)
 - [设计文档](docs/design.md) — 完整的架构设计说明
 - [Consolidation 报告](docs/consolidation.md) — 7 Phase 详细实现
 - [API 参考](docs/api.md) — CLI 命令和配置说明
+- [CHANGELOG](CHANGELOG.md) — 完整版本更新日志
 
 ---
 
@@ -786,7 +696,8 @@ actual_decay = base_decay × (1 - importance × 0.5)
 - 认知科学中的记忆整合理论
 - Ebbinghaus 遗忘曲线
 - 现有 AI Agent 记忆系统（memory-system-v2, triple-memory）
+- Crabby 🦀 的深度测试和犀利评价
 
 ---
 
-**Memory System v1.0 — 让 AI 拥有真正的记忆。** 🧠
+**Memory System v1.1.7 — 让 AI 拥有真正的记忆。** 🧠

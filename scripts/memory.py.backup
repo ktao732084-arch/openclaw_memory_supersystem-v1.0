@@ -1,13 +1,7 @@
 #!/usr/bin/env python3
 """
-Memory System v1.1.7 - 三层记忆架构 CLI
-支持 LLM 深度集成 + 访问日志追踪 + 时间敏感记忆 + 实体识别与隔离
-
-v1.1.7 改进：
-- LLM 深度集成：语义复杂度检测 + 智能触发 + 失败回退
-- 扩大 LLM 触发区间：0.2~0.5（原 0.2~0.3）
-- LLM 失败回退机制：失败时回退到规则结果，不丢弃
-- API Key 多源获取：环境变量 → 配置文件 → 参数传入
+Memory System v1.1.3 - 三层记忆架构 CLI
+支持 LLM 兜底机制
 """
 
 import os
@@ -18,42 +12,6 @@ from datetime import datetime, timedelta
 from pathlib import Path
 import hashlib
 import re
-
-# 导入 v1.1 新增模块
-try:
-    from v1_1_config import *
-    from v1_1_helpers import *
-    from v1_1_commands import *
-    V1_1_ENABLED = True
-except ImportError:
-    V1_1_ENABLED = False
-    print("⚠️ v1.1 模块未找到，部分功能不可用")
-
-# 导入 v1.1.5 实体系统模块（用于实体隔离和学习实体清理）
-try:
-    from v1_1_5_entity_system import ENTITY_SYSTEM_CONFIG
-    V1_1_5_ENABLED = True
-except ImportError:
-    V1_1_5_ENABLED = False
-    # 静默失败，不打印警告（功能会优雅降级）
-
-# 导入 v1.1.7 LLM 深度集成模块
-try:
-    from v1_1_7_llm_integration import (
-        detect_semantic_complexity,
-        should_use_llm_for_filtering,
-        smart_filter_segment,
-        smart_extract_entities,
-        get_api_key,
-        call_llm_with_fallback,
-        LLMIntegrationStats,
-        INTEGRATION_STATS,
-        LLM_INTEGRATION_CONFIG,
-    )
-    V1_1_7_ENABLED = True
-except ImportError:
-    V1_1_7_ENABLED = False
-    # 静默失败，功能会优雅降级
 
 # ============================================================
 # LLM 调用模块（v1.1.3 新增）
@@ -136,7 +94,7 @@ def call_llm(prompt, system_prompt=None, max_tokens=500):
 # ============================================================
 
 DEFAULT_CONFIG = {
-    "version": "1.1.7",
+    "version": "1.1.3",
     "decay_rates": {
         "fact": 0.008,
         "belief": 0.07,
@@ -162,37 +120,6 @@ DEFAULT_CONFIG = {
         "phase3_extract": True,
         "phase4b_verify": False,
         "min_confidence": 0.6
-    },
-    # v1.1.4 新增配置
-    "funnel": {
-        "tier2_threshold_lower": 0.35,
-        "tier2_threshold_upper": 0.70,
-        "tier3_default_ttl_days": 3,
-        "tier3_reactivation_extend_days": 3,
-        "tier3_max_ttl_days": 14
-    },
-    "access_tracking": {
-        "enabled": True,
-        "boost_coefficient": 0.2,
-        "max_boost": 0.5,
-        "weights": {
-            "retrieval": 1.0,
-            "used_in_response": 2.0,
-            "user_mentioned": 3.0
-        },
-        "protection_days": {
-            "strong": 3,
-            "medium": 7,
-            "weak": 14
-        }
-    },
-    "time_sensitivity": {
-        "enabled": True,
-        "immediate_hours": 12,
-        "short_term_days": 2,
-        "medium_term_days": 10,
-        "long_term_days": 35,
-        "event_after_hours": 2
     }
 }
 
@@ -286,41 +213,11 @@ ENTITY_PATTERNS = {
     }
 }
 
-# v1.1.6 新增：引号实体模式（优先级高于通用词）
-# 支持中英文引号：「」『』""''《》
-QUOTED_ENTITY_PATTERNS = [
-    # 中文单引号「」
-    "\u300c([^\u300d]+)\u300d",
-    # 中文双引号『』
-    "\u300e([^\u300f]+)\u300f",
-    # 中文弯引号""
-    "\u201c([^\u201d]+)\u201d",
-    # 中文弯引号''
-    "\u2018([^\u2019]+)\u2019",
-    # 书名号《》
-    "\u300a([^\u300b]+)\u300b",
-    # 英文单引号
-    r"'([^']+)'",
-    # 英文双引号
-    r'"([^"]+)"',
-]
-
-# 冲突覆盖信号（v1.1.1 新增，v1.1.6 扩展）
-# Tier 1: 高置信度修正信号 → 直接触发冲突覆盖
-OVERRIDE_SIGNALS_TIER1 = [
+# 冲突覆盖信号（v1.1.1 新增）
+OVERRIDE_SIGNALS = [
     "不再", "改成", "换成", "搬到", "现在是", "已经是",
-    "不是", "而是", "从", "到", "修正", "更正", "变成",
-    "其实是", "实际上", "事实上", "准确说"
+    "不是", "而是", "从", "到", "修正", "更正", "变成"
 ]
-
-# Tier 2: 中置信度修正信号 → 标记为"可能冲突"，降权但不自动覆盖
-OVERRIDE_SIGNALS_TIER2 = [
-    "逗你的", "开玩笑", "骗你的", "瞎说的", "胡说",
-    "刚才说错了", "说反了", "搞错了", "弄错了"
-]
-
-# 合并（向后兼容）
-OVERRIDE_SIGNALS = OVERRIDE_SIGNALS_TIER1 + OVERRIDE_SIGNALS_TIER2
 
 # 冲突降权系数
 CONFLICT_PENALTY = 0.2
@@ -433,88 +330,58 @@ def calculate_importance(content):
 
 def rule_filter(segments, threshold=0.3, use_llm_fallback=True):
     """
-    Phase 2: 重要性筛选（v1.1.7：智能 LLM 集成）
-    
-    v1.1.7 改进：
-    - 语义复杂度检测：识别需要 LLM 处理的复杂内容
-    - 扩大 LLM 触发区间：0.2~0.5（原 0.2~0.3）
-    - LLM 失败回退：失败时回退到规则结果，不丢弃
-    
+    Phase 2: 重要性筛选（v1.1.3：支持 LLM 兜底）
     输入: 语义片段列表
     输出: 筛选后的重要片段列表（带 importance 标注）
+    
+    规则优先，LLM 兜底
     """
     config = get_config()
     llm_enabled = config.get("llm_fallback", {}).get("enabled", True) and use_llm_fallback
     phase2_llm = config.get("llm_fallback", {}).get("phase2_filter", True)
     
     filtered = []
+    uncertain_segments = []  # 规则无法判断的片段
     
     for segment in segments:
         content = segment.get("content", "") if isinstance(segment, dict) else segment
-        source = segment.get("source", "unknown") if isinstance(segment, dict) else "unknown"
         
         # 1. 规则判断
-        rule_importance, rule_category = calculate_importance(content)
+        importance, category = calculate_importance(content)
         
-        # 2. v1.1.7: 智能 LLM 集成
-        if V1_1_7_ENABLED and llm_enabled and phase2_llm:
-            # 使用智能筛选（自动决定是否调用 LLM）
-            smart_result = smart_filter_segment(
-                content=content,
-                rule_importance=rule_importance,
-                rule_category=rule_category,
-                config_dict=config,
-            )
-            
-            importance = smart_result["importance"]
-            category = smart_result["category"]
-            method = smart_result["method"]
-            
-            # 记录统计
-            if smart_result.get("llm_stats"):
-                INTEGRATION_STATS.record_phase2(smart_result["llm_stats"])
-            if smart_result.get("complexity", {}).get("is_complex"):
-                INTEGRATION_STATS.record_complexity_trigger()
-            
-            # 判断是否保留
-            if importance >= threshold:
-                result = {
-                    "content": content,
-                    "importance": importance,
-                    "category": category,
-                    "source": source,
-                    "method": method,
-                    "complexity": smart_result.get("complexity", {}),
-                }
-                filtered.append(result)
+        # 2. 明确判断（高于阈值或低于阈值很多）
+        if importance >= threshold:
+            result = {
+                "content": content,
+                "importance": importance,
+                "category": category,
+                "source": segment.get("source", "unknown") if isinstance(segment, dict) else "unknown",
+                "method": "rule"
+            }
+            filtered.append(result)
+        elif importance < threshold - 0.1:
+            # 明确丢弃（低于阈值 0.1 以上）
+            pass
         else:
-            # 回退到原有逻辑（v1.1.6 及之前）
-            if rule_importance >= threshold:
-                result = {
-                    "content": content,
-                    "importance": rule_importance,
-                    "category": rule_category,
-                    "source": source,
-                    "method": "rule"
-                }
-                filtered.append(result)
-            elif rule_importance >= threshold - 0.1:
-                # 不确定区间，尝试 LLM
-                if llm_enabled and phase2_llm:
-                    llm_result = llm_filter_segment(content)
-                    if llm_result:
-                        importance = llm_result.get("importance", rule_importance)
-                        if importance >= threshold:
-                            result = {
-                                "content": content,
-                                "importance": importance,
-                                "category": llm_result.get("category", rule_category),
-                                "source": source,
-                                "method": "llm"
-                            }
-                            filtered.append(result)
+            # 3. 不确定（在阈值附近 ±0.1）→ 交给 LLM
+            if llm_enabled and phase2_llm:
+                uncertain_segments.append((segment, content, importance, category))
     
-    return filtered
+    # 4. LLM 兜底处理不确定的片段
+    if uncertain_segments and llm_enabled and phase2_llm:
+        for segment, content, rule_importance, category in uncertain_segments:
+            llm_result = llm_filter_segment(content)
+            if llm_result:
+                importance = llm_result.get("importance", rule_importance)
+                if importance >= threshold:
+                    result = {
+                        "content": content,
+                        "importance": importance,
+                        "category": llm_result.get("category", category),
+                        "source": segment.get("source", "unknown") if isinstance(segment, dict) else "unknown",
+                        "method": "llm"
+                    }
+                    filtered.append(result)
     
     return filtered
 
@@ -567,42 +434,12 @@ def llm_filter_segment(content):
 # Phase 3: 深度提取 - template_extract()
 # ============================================================
 
-def extract_entities(content, memory_dir=None, use_llm_fallback=True):
-    """
-    从内容中提取实体
-    
-    v1.1.6 改进：四层识别架构
-    - Layer 0: 引号实体（优先级最高，v1.1.6 新增）
-    - Layer 1: 硬编码模式（ENTITY_PATTERNS）
-    - Layer 2: 学习过的实体（learned_entities.json）
-    - Layer 3: LLM 提取 + 自动学习
-    
-    参数:
-        content: 要提取的内容
-        memory_dir: 记忆目录（用于加载学习实体，可选）
-        use_llm_fallback: 是否启用 LLM 兜底
-    
-    返回:
-        list: 提取的实体列表
-    """
+def extract_entities(content):
+    """从内容中提取实体（v1.1.2 改进：支持正则模式）"""
     import re
     entities = []
-    matched_positions = set()
+    matched_positions = set()  # 记录已匹配的位置，避免重复
     
-    # ===== Layer 0: 引号实体（v1.1.6 新增，优先级最高）=====
-    # 引号内的内容通常是专有名词，优先提取
-    for pattern in QUOTED_ENTITY_PATTERNS:
-        for match in re.finditer(pattern, content):
-            # 提取引号内的内容（group(1) 是括号捕获的部分）
-            quoted_text = match.group(1) if match.lastindex else match.group()
-            if quoted_text and len(quoted_text) > 1 and quoted_text not in entities:
-                entities.append(quoted_text)
-                # 标记位置，避免后续重复匹配
-                start, end = match.span()
-                for i in range(start, end):
-                    matched_positions.add(i)
-    
-    # ===== Layer 1: 硬编码模式（原有逻辑）=====
     for entity_type, config in ENTITY_PATTERNS.items():
         # 1. 固定词匹配
         if "fixed" in config:
@@ -617,54 +454,30 @@ def extract_entities(content, memory_dir=None, use_llm_fallback=True):
                     matched_text = match.group()
                     start, end = match.span()
                     
+                    # 检查是否与已匹配位置重叠
                     if not any(start < pos < end or pos == start for pos in matched_positions):
                         entities.append(matched_text)
+                        # 记录所有匹配位置
                         for i in range(start, end):
                             matched_positions.add(i)
     
-    # ===== Layer 2: 学习过的实体（v1.1.5 新增）=====
-    if V1_1_5_ENABLED and memory_dir:
-        from v1_1_5_entity_system import load_learned_entities
-        learned = load_learned_entities(memory_dir)
-        
-        # 精确匹配
-        for exact in learned.get("exact", []):
-            if exact in content and exact not in entities:
-                entities.append(exact)
-        
-        # 学习的模式匹配
-        for pattern in learned.get("patterns", []):
-            try:
-                for match in re.finditer(pattern, content):
-                    matched_text = match.group()
-                    if matched_text not in entities:
-                        entities.append(matched_text)
-            except re.error:
-                continue
-    
-    # ===== Layer 3: LLM 兜底（v1.1.5 新增）=====
-    if not entities and V1_1_5_ENABLED and use_llm_fallback:
-        config = get_config()
-        llm_enabled = config.get("llm_fallback", {}).get("enabled", True)
-        
-        if llm_enabled:
-            llm_result = llm_extract_entities(content)
-            if llm_result:
-                entities = llm_result.get("entities", [])
-                
-                # 学习新实体
-                if entities and memory_dir:
-                    from v1_1_5_entity_system import learn_new_entities
-                    learn_new_entities(entities, memory_dir)
-    
-    # ===== 去重和过滤（原有逻辑）=====
+    # 去重并过滤
     entities = [e for e in set(entities) if e and len(e) > 1]
+    
+    # 按长度排序，优先保留长实体
+    entities_by_length = {}
+    for e in entities:
+        length = len(e)
+        if length not in entities_by_length:
+            entities_by_length[length] = []
+        entities_by_length[length].append(e)
     
     # 过滤：如果短实体是长实体的子串，移除短实体
     final_entities = []
     sorted_entities = sorted(entities, key=len, reverse=True)
     
     for entity in sorted_entities:
+        # 检查是否是其他实体的子串
         is_substring = False
         for other in final_entities:
             if entity in other and entity != other:
@@ -697,9 +510,9 @@ def classify_memory_type(content, importance):
     # 默认 → fact
     return "fact"
 
-def template_extract(filtered_segments, use_llm_fallback=True, memory_dir=None):
+def template_extract(filtered_segments, use_llm_fallback=True):
     """
-    Phase 3: 深度提取（v1.1.5：三层实体识别 + LLM 兜底）
+    Phase 3: 深度提取（v1.1.3：支持 LLM 兜底）
     将筛选后的片段转为结构化 facts/beliefs
     
     模板匹配优先，LLM 兜底
@@ -707,10 +520,6 @@ def template_extract(filtered_segments, use_llm_fallback=True, memory_dir=None):
     config = get_config()
     llm_enabled = config.get("llm_fallback", {}).get("enabled", True) and use_llm_fallback
     phase3_llm = config.get("llm_fallback", {}).get("phase3_extract", True)
-    
-    # 获取 memory_dir
-    if memory_dir is None:
-        memory_dir = get_memory_dir()
     
     extracted = {
         "facts": [],
@@ -724,11 +533,20 @@ def template_extract(filtered_segments, use_llm_fallback=True, memory_dir=None):
         source = segment.get("source", "unknown")
         method = segment.get("method", "rule")
         
-        # 1. v1.1.5: 三层实体识别（传入 memory_dir）
-        entities = extract_entities(content, memory_dir=memory_dir, use_llm_fallback=llm_enabled and phase3_llm)
+        # 1. 规则提取
         mem_type = classify_memory_type(content, importance)
+        entities = extract_entities(content)
         
-        # 2. 构建记录
+        # 2. 如果实体为空且启用 LLM，尝试 LLM 提取
+        if not entities and llm_enabled and phase3_llm:
+            llm_result = llm_extract_entities(content)
+            if llm_result:
+                entities = llm_result.get("entities", [])
+                # 可能更新 mem_type
+                if "type" in llm_result:
+                    mem_type = llm_result["type"]
+        
+        # 3. 构建记录
         record = {
             "id": generate_id(mem_type[0], content),
             "content": content,
@@ -737,33 +555,8 @@ def template_extract(filtered_segments, use_llm_fallback=True, memory_dir=None):
             "entities": entities,
             "created": now_iso(),
             "source": source,
-            "extract_method": method,
-            # v1.1.4 新增字段
-            "expires_at": None,
-            "is_permanent": True,
-            "access_count": 0,
-            "retrieval_count": 0,
-            "used_in_response_count": 0,
-            "user_mentioned_count": 0,
-            "last_accessed": None,
-            "access_boost": 0.0,
-            "tier3_tracked": False,
-            "reactivation_count": 0,
-            "final_score": importance
+            "extract_method": method
         }
-        
-        # v1.1.4: 时间敏感检测
-        if V1_1_ENABLED:
-            # 第一级强匹配
-            tier1_result = check_tier1_patterns(content)
-            if tier1_result:
-                record['expires_at'] = tier1_result.get('expires_at')
-                record['is_permanent'] = tier1_result.get('is_permanent', True)
-            # 第二级 LLM 介入（灰色地带）
-            elif 0.35 <= importance <= 0.70:
-                llm_result = call_llm_time_sensor(content, importance)
-                record['expires_at'] = llm_result.get('expires_at')
-                record['is_permanent'] = llm_result.get('is_permanent', True)
         
         # belief 需要额外字段
         if mem_type == "belief":
@@ -820,44 +613,12 @@ type 可选值：
 # Phase 4a: Facts 去重合并
 # ============================================================
 
-# v1.1.6: 去重配置
-DEDUP_CONFIG = {
-    "min_overlap_ratio": 0.3,  # 最小重叠比例（30%）
-    "tier1_penalty": 0.1,      # Tier 1 信号：强降权（保留 10%）
-    "tier2_penalty": 0.4,      # Tier 2 信号：弱降权（保留 40%）
-}
-
-def tokenize_chinese(text):
-    """
-    简单的中文分词（字符级 + 英文单词）
-    对于中文，使用 2-gram；对于英文，使用空格分词
-    """
-    import re
-    tokens = set()
-    
-    # 提取英文单词
-    english_words = re.findall(r'[a-zA-Z]+', text)
-    tokens.update(english_words)
-    
-    # 提取中文字符的 2-gram
-    chinese_chars = re.findall(r'[\u4e00-\u9fff]', text)
-    for i in range(len(chinese_chars) - 1):
-        tokens.add(chinese_chars[i] + chinese_chars[i + 1])
-    
-    # 单个中文字符也加入（用于短文本）
-    tokens.update(chinese_chars)
-    
-    return tokens
-
 def deduplicate_facts(new_facts, existing_facts):
     """
-    Phase 4a: Facts 去重合并 + 冲突检测（v1.1.6 改进）
-    
-    v1.1.6 改进：
-    - 使用相对比例（30%）替代绝对数量（3）判断相似度
-    - 分层冲突信号：Tier 1 强降权，Tier 2 弱降权
-    
-    返回: (merged_facts, duplicate_count, downgraded_count)
+    Phase 4a: Facts 去重合并 + 冲突检测（v1.1.1）
+    - 相同实体 + 相似内容 → 合并，保留更新版本
+    - 检测覆盖信号 → 对旧记忆执行惩罚性降权
+    - 返回: (merged_facts, duplicate_count, downgraded_count)
     """
     merged = []
     duplicate_count = 0
@@ -876,10 +637,8 @@ def deduplicate_facts(new_facts, existing_facts):
         new_content = new_fact["content"].lower()
         new_entities = new_fact.get("entities", [])
         
-        # v1.1.6: 分层检测覆盖信号
-        has_tier1_override = any(signal in new_fact["content"] for signal in OVERRIDE_SIGNALS_TIER1)
-        has_tier2_override = any(signal in new_fact["content"] for signal in OVERRIDE_SIGNALS_TIER2)
-        has_override = has_tier1_override or has_tier2_override
+        # 检测是否包含覆盖信号
+        has_override = any(signal in new_fact["content"] for signal in OVERRIDE_SIGNALS)
         
         # 检查是否与现有 fact 重复或冲突
         for entity in new_entities:
@@ -887,37 +646,22 @@ def deduplicate_facts(new_facts, existing_facts):
                 for existing in existing_by_entity[entity]:
                     existing_content = existing["content"].lower()
                     
-                    # 计算内容重叠度（v1.1.6: 使用中文分词）
-                    new_tokens = tokenize_chinese(new_content)
-                    existing_tokens = tokenize_chinese(existing_content)
-                    overlap = len(new_tokens & existing_tokens)
+                    # 计算内容重叠度
+                    new_words = set(new_content.split())
+                    existing_words = set(existing_content.split())
+                    overlap = len(new_words & existing_words)
+                    overlap_ratio = overlap / max(len(new_words), len(existing_words), 1)
                     
-                    # v1.1.6: 使用相对比例替代绝对数量
-                    min_len = min(len(new_tokens), len(existing_tokens))
-                    overlap_ratio = overlap / max(min_len, 1)
-                    
-                    # v1.1.6: 相似度检查改用比例阈值
-                    is_similar = (
-                        new_content in existing_content or 
+                    # 简单相似度检查：包含关系或高度重叠
+                    if (new_content in existing_content or 
                         existing_content in new_content or
-                        overlap_ratio >= DEDUP_CONFIG["min_overlap_ratio"]
-                    )
-                    
-                    if is_similar:
+                        overlap > 3):
+                        
                         # 如果新记忆包含覆盖信号，执行冲突降权
-                        if has_override and overlap_ratio >= DEDUP_CONFIG["min_overlap_ratio"]:
-                            # v1.1.6: 分层降权
+                        if has_override and overlap_ratio > 0.3:
+                            # 惩罚性降权
                             old_score = existing.get("score", existing.get("importance", 0.5))
-                            if has_tier1_override:
-                                # Tier 1: 强降权（几乎废弃旧记忆）
-                                penalty = DEDUP_CONFIG["tier1_penalty"]
-                                existing["override_tier"] = 1
-                            else:
-                                # Tier 2: 弱降权（标记为可能冲突）
-                                penalty = DEDUP_CONFIG["tier2_penalty"]
-                                existing["override_tier"] = 2
-                            
-                            existing["score"] = old_score * penalty
+                            existing["score"] = old_score * CONFLICT_PENALTY
                             existing["conflict_downgraded"] = True
                             existing["downgrade_reason"] = new_fact["id"]
                             existing["downgrade_at"] = now_iso()
@@ -1341,66 +1085,20 @@ def entity_search(query, memory_dir, limit=20):
     
     return results
 
-def rerank_results(results, query, limit, memory_dir=None):
+def rerank_results(results, query, limit):
     """
     重排序检索结果
-    
-    v1.1.5 改进：集成实体隔离（竞争性抑制）
-    
-    综合考虑: 匹配分数 + 记忆重要性 + 记忆score + 实体隔离
+    综合考虑: 匹配分数 + 记忆重要性 + 记忆score
     """
-    # 1. 计算基础综合分数
     for r in results:
+        # 综合分数 = 匹配分数 * 0.4 + 重要性 * 0.3 + 记忆score * 0.3
         r["final_score"] = (
             r.get("score", 0) * 0.4 +
             r.get("importance", 0.5) * 0.3 +
             r.get("memory_score", 0.5) * 0.3
         )
     
-    # 2. v1.1.5: 实体隔离（竞争性抑制）
-    if V1_1_5_ENABLED and results:
-        from v1_1_5_entity_system import (
-            extract_entities as extract_entities_v1_1_5,
-            should_apply_entity_isolation,
-            find_similar_entity_groups,
-            is_similar_entity,
-            ENTITY_SYSTEM_CONFIG
-        )
-        
-        if memory_dir is None:
-            memory_dir = get_memory_dir()
-        
-        # 从查询中提取实体
-        query_entities = extract_entities(query, memory_dir=memory_dir, use_llm_fallback=False)
-        
-        if query_entities:
-            # 收集所有候选实体
-            all_candidate_entities = set()
-            for r in results:
-                all_candidate_entities.update(r.get('entities', []))
-            
-            # 找出相似实体组
-            similar_groups = find_similar_entity_groups(query_entities, list(all_candidate_entities))
-            
-            if similar_groups:
-                inhibition_factor = ENTITY_SYSTEM_CONFIG["isolation"]["inhibition_factor"]
-                
-                for r in results:
-                    mem_entities = set(r.get('entities', []))
-                    
-                    # 精确匹配查询实体 → 保持权重
-                    if mem_entities & set(query_entities):
-                        continue
-                    
-                    # 包含相似但不同的实体 → 抑制
-                    for group in similar_groups:
-                        if mem_entities & group and not (mem_entities & set(query_entities)):
-                            r['final_score'] *= inhibition_factor
-                            r['isolation_applied'] = True
-                            r['isolation_reason'] = f"竞争性抑制: {mem_entities & group}"
-                            break
-    
-    # 3. 按综合分数排序
+    # 按综合分数排序
     results.sort(key=lambda x: x["final_score"], reverse=True)
     return results[:limit]
 
@@ -1485,8 +1183,8 @@ def router_search(query, memory_dir=None):
             seen_ids.add(r["id"])
             merged_results.append(r)
     
-    # 5. 重排序（v1.1.5: 内部集成实体隔离）
-    reranked = rerank_results(merged_results, query, config["rerank"], memory_dir=memory_dir)
+    # 5. 重排序
+    reranked = rerank_results(merged_results, query, config["rerank"])
     
     # 6. 最终筛选
     final_results = reranked[:config["final"]]
@@ -1873,20 +1571,13 @@ def cmd_consolidate(args):
     
     # 更新状态
     state['last_run'] = now_iso()
-    state['current_phase'] = 0
+    state['current_phase'] = 1
     with open(state_path, 'w', encoding='utf-8') as f:
         json.dump(state, f, indent=2, ensure_ascii=False)
     
     try:
         # 用于存储中间结果
         phase_data = state.get('phase_data', {})
-        
-        # Phase 0: 清理过期记忆（v1.1.4 新增）
-        if V1_1_ENABLED and (not args.phase or args.phase == 0):
-            print("\n🗑️ Phase 0: 清理过期记忆")
-            expired_count = phase0_expire_memories(memory_dir)
-            print(f"   归档 {expired_count} 条过期记忆")
-            print("   ✅ 完成")
         
         # Phase 1: 轻量全量（模拟 - 需要接入 OpenClaw session）
         if not args.phase or args.phase == 1:
@@ -2017,49 +1708,23 @@ def cmd_consolidate(args):
             decay_rates = config['decay_rates']
             archive_threshold = config['thresholds']['archive']
             
-            # 5a: 应用访问加成（v1.1.5 已在 v1_1_helpers.calculate_access_boost 中修复）
-            if V1_1_ENABLED:
-                print("   5a: 应用访问加成")
-                for mem_type in ['facts', 'beliefs', 'summaries']:
-                    active_path = memory_dir / f'layer2/active/{mem_type}.jsonl'
-                    records = load_jsonl(active_path)
-                    records = phase5_rank_with_access_boost(records)
-                    save_jsonl(active_path, records)
-                print("   ✅ 访问加成完成")
-            
-            # 5b: v1.1.5 清理废弃的学习实体
-            if V1_1_5_ENABLED:
-                print("   5b: 清理废弃学习实体")
-                from v1_1_5_entity_system import cleanup_learned_entities
-                cleanup_stats = cleanup_learned_entities(memory_dir)
-                print(f"       清理: {cleanup_stats['exact_removed']} 实体, {cleanup_stats['patterns_removed']} 模式")
-                print(f"       保留: {cleanup_stats['exact_remaining']} 实体, {cleanup_stats['patterns_remaining']} 模式")
-            
-            # 5c: 衰减（含访问保护）
-            print("   5c: 衰减更新")
             archived_count = 0
             for mem_type in ['facts', 'beliefs', 'summaries']:
                 active_path = memory_dir / f'layer2/active/{mem_type}.jsonl'
                 archive_path = memory_dir / f'layer2/archive/{mem_type}.jsonl'
                 
                 records = load_jsonl(active_path)
-                
-                # v1.1.4: 应用访问保护衰减
-                if V1_1_ENABLED:
-                    records = phase6_decay_with_access_protection(records, config)
-                else:
-                    # v1.1.3 原始衰减逻辑
-                    decay_rate = decay_rates.get(mem_type.rstrip('s'), 0.01)
-                    for r in records:
-                        importance = r.get('importance', 0.5)
-                        actual_decay = decay_rate * (1 - importance * 0.5)
-                        r['score'] = r.get('score', importance) * (1 - actual_decay)
-                
                 remaining = []
                 to_archive = []
                 
+                decay_rate = decay_rates.get(mem_type.rstrip('s'), 0.01)
+                
                 for r in records:
-                    if r.get('score', 0) < archive_threshold:
+                    importance = r.get('importance', 0.5)
+                    actual_decay = decay_rate * (1 - importance * 0.5)
+                    r['score'] = r.get('score', importance) * (1 - actual_decay)
+                    
+                    if r['score'] < archive_threshold:
                         to_archive.append(r)
                         archived_count += 1
                     else:
@@ -2241,16 +1906,8 @@ def cmd_consolidate(args):
         print("\n" + "=" * 40)
         print("✅ Consolidation 完成!")
         
-        # v1.1.7: 显示智能 LLM 集成统计
-        if V1_1_7_ENABLED:
-            summary = INTEGRATION_STATS.summary()
-            total_calls = summary["phase2"]["calls"] + summary["phase3"]["calls"]
-            if total_calls > 0:
-                INTEGRATION_STATS.print_summary()
-            else:
-                print("\n💰 Token 节省: 100% (纯规则处理，无 LLM 调用)")
-        # 回退到原有统计（v1.1.6 及之前）
-        elif LLM_STATS["phase2_calls"] > 0 or LLM_STATS["phase3_calls"] > 0:
+        # 显示 LLM 统计（v1.1.3 新增）
+        if LLM_STATS["phase2_calls"] > 0 or LLM_STATS["phase3_calls"] > 0:
             print("\n📊 LLM 调用统计:")
             print(f"   Phase 2 (筛选): {LLM_STATS['phase2_calls']} 次")
             print(f"   Phase 3 (提取): {LLM_STATS['phase3_calls']} 次")
@@ -2362,7 +2019,7 @@ def main():
     # consolidate
     parser_consolidate = subparsers.add_parser('consolidate', help='执行 Consolidation')
     parser_consolidate.add_argument('--force', action='store_true', help='强制执行')
-    parser_consolidate.add_argument('--phase', type=int, choices=[0,1,2,3,4,5,6,7], help='只执行指定阶段')
+    parser_consolidate.add_argument('--phase', type=int, choices=[1,2,3,4,5,6,7], help='只执行指定阶段')
     parser_consolidate.add_argument('--input', help='输入文件路径（Phase 1 数据源）')
     parser_consolidate.set_defaults(func=cmd_consolidate)
     
@@ -2379,27 +2036,6 @@ def main():
     parser_search.add_argument('query', help='检索查询')
     parser_search.add_argument('--json', action='store_true', help='输出 JSON 格式')
     parser_search.set_defaults(func=cmd_search)
-    
-    # v1.1.4 新增命令
-    if V1_1_ENABLED:
-        # record-access
-        parser_access = subparsers.add_parser('record-access', help='记录访问日志')
-        parser_access.add_argument('id', help='记忆 ID')
-        parser_access.add_argument('--type', choices=['retrieval', 'used_in_response', 'user_mentioned'], 
-                                   default='retrieval', help='访问类型')
-        parser_access.add_argument('--query', help='查询内容')
-        parser_access.add_argument('--context', help='上下文')
-        parser_access.set_defaults(func=lambda args: cmd_record_access(args, get_memory_dir()))
-        
-        # view-access-log
-        parser_view_access = subparsers.add_parser('view-access-log', help='查看访问日志')
-        parser_view_access.add_argument('--limit', type=int, default=20, help='显示条数')
-        parser_view_access.set_defaults(func=lambda args: cmd_view_access_log(args, get_memory_dir()))
-        
-        # view-expired-log
-        parser_view_expired = subparsers.add_parser('view-expired-log', help='查看过期记忆日志')
-        parser_view_expired.add_argument('--limit', type=int, default=20, help='显示条数')
-        parser_view_expired.set_defaults(func=lambda args: cmd_view_expired_log(args, get_memory_dir()))
     
     args = parser.parse_args()
     
