@@ -2684,11 +2684,56 @@ def cmd_export_qmd(args):
     for f in qmd_index_dir.glob('*.md'):
         print(f"   - {f.name}")
     
-    # 提示更新 QMD 索引
-    print()
-    print("💡 运行以下命令更新 QMD 索引:")
-    print(f"   qmd collection add {qmd_index_dir} --name curated --mask '*.md'")
-    print("   qmd update")
+    # v1.2.3: --auto-reload 自动执行 qmd 命令
+    if getattr(args, 'auto_reload', False):
+        if qmd_available(memory_dir):
+            print()
+            print("🔄 自动更新 QMD 索引...")
+            try:
+                env = _get_qmd_env()
+                # 添加到 collection（如果已存在则跳过）
+                result1 = subprocess.run(
+                    ['qmd', 'collection', 'add', str(qmd_index_dir), '--name', 'curated', '--mask', '*.md'],
+                    capture_output=True, text=True, timeout=30, env=env
+                )
+                if result1.returncode != 0:
+                    if 'already exists' in result1.stderr:
+                        print("   ℹ️ collection 'curated' 已存在，跳过添加")
+                    else:
+                        print(f"   ⚠️ collection add 失败: {result1.stderr.strip()}")
+                else:
+                    print("   ✅ collection add 完成")
+                
+                # 更新索引
+                result2 = subprocess.run(
+                    ['qmd', 'update'],
+                    capture_output=True, text=True, timeout=60, env=env
+                )
+                if result2.returncode != 0:
+                    print(f"   ⚠️ update 失败: {result2.stderr.strip()}")
+                else:
+                    print("   ✅ qmd update 完成")
+                
+                print("🎉 QMD 索引已自动更新")
+            except subprocess.TimeoutExpired:
+                print("   ⚠️ 命令超时")
+            except Exception as e:
+                print(f"   ⚠️ 执行失败: {e}")
+        else:
+            print()
+            print("⚠️ QMD 不可用，跳过自动更新")
+            print("💡 手动运行以下命令:")
+            print(f"   qmd collection add {qmd_index_dir} --name curated --mask '*.md'")
+            print("   qmd update")
+    else:
+        # 提示更新 QMD 索引
+        print()
+        print("💡 运行以下命令更新 QMD 索引:")
+        print(f"   qmd collection add {qmd_index_dir} --name curated --mask '*.md'")
+        print("   qmd update")
+        print()
+        print("   或使用 --auto-reload 自动执行:")
+        print("   memory.py export-qmd --auto-reload")
 
 def cmd_inject(args):
     """
@@ -3186,6 +3231,7 @@ def main():
     
     # v1.2.0 export-qmd 命令
     parser_export_qmd = subparsers.add_parser('export-qmd', help='导出记忆为 QMD 索引格式')
+    parser_export_qmd.add_argument('--auto-reload', action='store_true', help='自动执行 qmd 命令更新索引')
     parser_export_qmd.set_defaults(func=cmd_export_qmd)
     
     # v1.2.2: Mini-Consolidate 命令
