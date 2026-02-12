@@ -1504,16 +1504,33 @@ def _get_qmd_env():
         'NO_COLOR': '1',
     }
 
-def qmd_available():
-    """检查 QMD 是否可用"""
+def qmd_available(memory_dir=None):
+    """
+    检查 QMD 是否可用（v1.2.1 增强版）
+    
+    检查项:
+    1. qmd 命令是否存在
+    2. qmd status 是否正常
+    3. health.lock 是否存在（写入中断标记）
+    """
     try:
         env = _get_qmd_env()
         result = subprocess.run(
             ['qmd', 'status'],
             capture_output=True, timeout=5, env=env
         )
-        # qmd status 成功返回 0
-        return result.returncode == 0
+        if result.returncode != 0:
+            return False
+        
+        # v1.2.1: 检查 health.lock（写入中断标记）
+        if memory_dir is None:
+            memory_dir = get_memory_dir()
+        qmd_dir = Path(memory_dir) / '.qmd'
+        if (qmd_dir / 'health.lock').exists():
+            # 上次写入中断，静默 fallback 到非 QMD 模式
+            return False
+        
+        return True
     except:
         return False
 
@@ -1619,29 +1636,76 @@ def extract_memory_id_from_snippet(snippet):
 
 def export_for_qmd(memory_dir):
     """
-    将 JSONL 转换为 QMD 友好的 Markdown 格式
+    将 JSONL 转换为 QMD 友好的 Markdown 格式（v1.2.1 增强版）
+    
+    新增:
+    - health.lock 写入锁（防止脏数据）
+    - meta.json 元数据（版本、更新时间、记忆数）
+    - .qmd/ 目录结构
     """
-    qmd_index_dir = memory_dir / 'layer2/qmd-index'
+    memory_dir = Path(memory_dir)
+    
+    # v1.2.1: 使用 .qmd/ 目录
+    qmd_dir = memory_dir / '.qmd'
+    qmd_index_dir = qmd_dir / 'index'
     qmd_index_dir.mkdir(parents=True, exist_ok=True)
     
-    for mem_type in ['facts', 'beliefs', 'summaries']:
-        records = load_jsonl(memory_dir / f'layer2/active/{mem_type}.jsonl')
-        
-        md_content = f"# {mem_type.title()}\n\n"
-        md_content += f"> Generated: {now_iso()} | Count: {len(records)}\n\n"
-        
-        for r in records:
-            # 格式：[memory_id] 内容
-            md_content += f"[{r['id']}] {r['content']}\n\n"
+    # 同时保留原有位置（兼容性）
+    legacy_dir = memory_dir / 'layer2/qmd-index'
+    legacy_dir.mkdir(parents=True, exist_ok=True)
+    
+    # v1.2.1: 写入前创建锁
+    lock_file = qmd_dir / 'health.lock'
+    lock_file.touch()
+    
+    total_count = 0
+    
+    try:
+        for mem_type in ['facts', 'beliefs', 'summaries']:
+            records = load_jsonl(memory_dir / f'layer2/active/{mem_type}.jsonl')
+            total_count += len(records)
             
-            if r.get('entities'):
-                md_content += f"**Entities**: {', '.join(r['entities'])}\n\n"
+            md_content = f"# {mem_type.title()}\n\n"
+            md_content += f"> Generated: {now_iso()} | Count: {len(records)}\n\n"
             
-            md_content += "---\n\n"
+            for r in records:
+                # 格式：[memory_id] 内容
+                md_content += f"[{r['id']}] {r['content']}\n\n"
+                
+                if r.get('entities'):
+                    md_content += f"**Entities**: {', '.join(r['entities'])}\n\n"
+                
+                md_content += "---\n\n"
+            
+            # 写入新位置
+            output_path = qmd_index_dir / f'{mem_type}.md'
+            with open(output_path, 'w', encoding='utf-8') as f:
+                f.write(md_content)
+            
+            # 写入兼容位置
+            legacy_path = legacy_dir / f'{mem_type}.md'
+            with open(legacy_path, 'w', encoding='utf-8') as f:
+                f.write(md_content)
         
-        output_path = qmd_index_dir / f'{mem_type}.md'
-        with open(output_path, 'w', encoding='utf-8') as f:
-            f.write(md_content)
+        # v1.2.1: 写入 meta.json
+        meta = {
+            "version": "1.2.1",
+            "updated": now_iso(),
+            "count": total_count,
+            "types": {
+                "facts": len(load_jsonl(memory_dir / 'layer2/active/facts.jsonl')),
+                "beliefs": len(load_jsonl(memory_dir / 'layer2/active/beliefs.jsonl')),
+                "summaries": len(load_jsonl(memory_dir / 'layer2/active/summaries.jsonl'))
+            }
+        }
+        meta_file = qmd_dir / 'meta.json'
+        with open(meta_file, 'w', encoding='utf-8') as f:
+            json.dump(meta, f, indent=2, ensure_ascii=False)
+        
+    finally:
+        # v1.2.1: 完成后删除锁
+        if lock_file.exists():
+            lock_file.unlink()
     
     return qmd_index_dir
 
@@ -1894,6 +1958,14 @@ def cmd_init(args):
 """.format(time=now_iso())
         with open(snapshot_path, 'w', encoding='utf-8') as f:
             f.write(snapshot_content)
+    
+    # v1.2.1: 创建 .gitignore（保护 .qmd/ 目录）
+    gitignore_path = memory_dir / '.gitignore'
+    if not gitignore_path.exists():
+        with open(gitignore_path, 'w', encoding='utf-8') as f:
+            f.write("# Memory System v1.2.1\n")
+            f.write("# QMD 索引目录（二进制文件，不应提交到 git）\n")
+            f.write(".qmd/\n")
     
     print("✅ 记忆系统初始化完成")
     print(f"   目录: {memory_dir}")
@@ -2373,6 +2445,23 @@ def cmd_consolidate(args):
                 json.dump(relations_index, f, indent=2, ensure_ascii=False)
             
             print("   ✅ 完成")
+        
+        # v1.2.1: Phase 6.5 - QMD 索引更新
+        if not args.phase or args.phase in [6, 7]:
+            if qmd_available(memory_dir):
+                print("\n🔍 Phase 6.5: QMD 索引更新")
+                try:
+                    export_for_qmd(memory_dir)
+                    # 读取 meta.json 显示统计
+                    meta_path = memory_dir / '.qmd/meta.json'
+                    if meta_path.exists():
+                        with open(meta_path, 'r') as f:
+                            meta = json.load(f)
+                        print(f"   记忆数: {meta.get('count', 0)}")
+                    print("   ✅ 完成")
+                except Exception as e:
+                    print(f"   ⚠️ QMD 更新失败: {e}")
+                    print("   继续使用基础索引...")
         
         # Phase 7: Layer 1 快照
         if not args.phase or args.phase == 7:
