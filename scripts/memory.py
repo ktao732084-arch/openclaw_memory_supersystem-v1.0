@@ -2362,6 +2362,115 @@ def cmd_validate(args):
                             errors.append(f"{path}:{i+1} 缺少 content 字段")
                 except Exception as e:
                     errors.append(f"{path} 解析失败: {e}")
+
+# ============================================================
+# v1.2.0 动态注入命令
+# ============================================================
+
+def cmd_inject(args):
+    """
+    动态注入：根据用户消息检索相关记忆，输出可直接注入 prompt 的内容
+    
+    用法：
+        memory.py inject "用户消息" [--max-tokens 500] [--format text|json]
+    
+    输出格式（text）：
+        ## 相关记忆
+        - [fact] 用户名字是某用户...
+        - [belief] Ktao认为记忆系统很重要...
+    
+    输出格式（json）：
+        {"direct": [...], "marked": [...], "reference": [...]}
+    """
+    memory_dir = get_memory_dir()
+    
+    if not memory_dir.exists():
+        if args.format == 'json':
+            print('{"error": "记忆系统未初始化"}')
+        else:
+            print("# 无相关记忆")
+        return
+    
+    query = args.query
+    max_tokens = args.max_tokens
+    
+    # 调用 router_search 检索
+    result = router_search(query, memory_dir)
+    
+    if not result.get("results"):
+        if args.format == 'json':
+            print('{"direct": [], "marked": [], "reference": []}')
+        else:
+            print("# 无相关记忆")
+        return
+    
+    # 格式化输出
+    injection = result.get("injection", format_injection(result["results"]))
+    
+    if args.format == 'json':
+        print(json.dumps(injection, ensure_ascii=False, indent=2))
+    else:
+        # 文本格式，适合直接注入 prompt
+        lines = []
+        
+        # 直接注入的高置信度记忆
+        if injection.get("direct"):
+            lines.append("## 相关记忆")
+            for item in injection["direct"][:5]:  # 最多5条
+                type_tag = item.get("type", "fact")[0].upper()
+                content = item["content"][:200]  # 截断
+                lines.append(f"- [{type_tag}] {content}")
+        
+        # 带标记的中置信度记忆
+        if injection.get("marked"):
+            if not lines:
+                lines.append("## 可能相关")
+            for item in injection["marked"][:3]:  # 最多3条
+                type_tag = item.get("type", "fact")[0].upper()
+                content = item["content"][:150]
+                source = item.get("source", "unknown")
+                lines.append(f"- [{type_tag}] {content} (ref:{source})")
+        
+        # 控制总 token 数（粗略估计：1中文字≈1.5token）
+        output = "\n".join(lines)
+        estimated_tokens = len(output) * 1.5
+        if estimated_tokens > max_tokens:
+            # 截断
+            char_limit = int(max_tokens / 1.5)
+            output = output[:char_limit] + "\n..."
+        
+        print(output if output else "# 无相关记忆")
+
+def cmd_validate(args):
+    """验证数据完整性"""
+    memory_dir = get_memory_dir()
+    print("🔍 验证数据完整性...")
+    
+    errors = []
+    
+    # 检查目录结构
+    required_dirs = [
+        'layer1', 'layer2/active', 'layer2/archive',
+        'layer2/entities', 'layer2/index', 'state'
+    ]
+    for d in required_dirs:
+        if not (memory_dir / d).exists():
+            errors.append(f"缺少目录: {d}")
+    
+    # 检查 JSONL 文件格式
+    for mem_type in ['facts', 'beliefs', 'summaries']:
+        for pool in ['active', 'archive']:
+            path = memory_dir / f'layer2/{pool}/{mem_type}.jsonl'
+            if path.exists():
+                try:
+                    records = load_jsonl(path)
+                    for i, r in enumerate(records):
+                        if 'id' not in r:
+                            errors.append(f"{path}:{i+1} 缺少 id 字段")
+                        if 'content' not in r:
+                            errors.append(f"{path}:{i+1} 缺少 content 字段")
+                except Exception as e:
+                    errors.append(f"{path} 解析失败: {e}")
     
     if errors:
         print(f"❌ 发现 {len(errors)} 个问题:")
@@ -2451,6 +2560,13 @@ def main():
         parser_view_expired = subparsers.add_parser('view-expired-log', help='查看过期记忆日志')
         parser_view_expired.add_argument('--limit', type=int, default=20, help='显示条数')
         parser_view_expired.set_defaults(func=lambda args: cmd_view_expired_log(args, get_memory_dir()))
+    
+    # v1.2.0 inject 命令
+    parser_inject = subparsers.add_parser('inject', help='动态注入：根据消息检索相关记忆')
+    parser_inject.add_argument('query', help='用户消息')
+    parser_inject.add_argument('--max-tokens', type=int, default=500, help='最大 token 数')
+    parser_inject.add_argument('--format', choices=['text', 'json'], default='text', help='输出格式')
+    parser_inject.set_defaults(func=cmd_inject)
     
     args = parser.parse_args()
     
