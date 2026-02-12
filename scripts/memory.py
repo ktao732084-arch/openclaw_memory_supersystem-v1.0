@@ -136,7 +136,7 @@ def call_llm(prompt, system_prompt=None, max_tokens=500):
 # ============================================================
 
 DEFAULT_CONFIG = {
-    "version": "1.1.7",
+    "version": "1.2.0",
     "decay_rates": {
         "fact": 0.008,
         "belief": 0.07,
@@ -195,6 +195,50 @@ DEFAULT_CONFIG = {
         "event_after_hours": 2
     }
 }
+
+# ============================================================
+# v1.2.0 废话前置过滤器（规则强化）
+# ============================================================
+
+NOISE_PATTERNS = {
+    # 纯语气词/感叹词（直接跳过，不进入 LLM）
+    "pure_interjection": [
+        r"^[哈嘿呵嗯啊哦噢呃唉嘛吧啦呀咯嘞哇喔]+[~～。！!？?]*$",  # 哈哈哈、嗯嗯、啊啊啊
+        r"^[oO]+[kK]+[~～。！!？?]*$",  # ok, OK, okok
+        r"^[yY]e+[sS]*[~～。！!？?]*$",  # yes, yeees
+        r"^[nN]o+[~～。！!？?]*$",  # no, nooo
+        r"^[lL][oO]+[lL]+[~～。！!？?]*$",  # lol, looool
+    ],
+    # 简单确认/应答（直接跳过）
+    "simple_ack": [
+        r"^(好的?|行|可以|没问题|收到|了解|明白|懂了?|知道了?|OK|ok|嗯|对|是的?)[~～。！!？?]*$",
+        r"^(谢谢|感谢|thanks?|thx)[~～。！!？?]*$",
+        r"^(不用|不必|算了|没事|无所谓)[~～。！!？?]*$",
+    ],
+    # 纯表情/符号
+    "emoji_only": [
+        r"^[\U0001F300-\U0001F9FF\U0001FA00-\U0001FAFF\u2600-\u26FF\u2700-\u27BF\s~～。！!？?]+$",  # emoji
+        r"^[.。,，!！?？~～\s]+$",  # 纯标点
+    ],
+    # 过短内容（<3字符，排除数字和特殊标记）
+    "too_short": [
+        r"^.{0,2}$",  # 0-2个字符
+    ],
+}
+
+def is_noise(content: str) -> tuple[bool, str]:
+    """
+    前置废话检测，返回 (是否废话, 匹配的类别)
+    在 calculate_importance 之前调用，直接跳过明显废话
+    """
+    content = content.strip()
+    
+    for category, patterns in NOISE_PATTERNS.items():
+        for pattern in patterns:
+            if re.match(pattern, content):
+                return True, category
+    
+    return False, ""
 
 # ============================================================
 # 重要性规则配置
@@ -448,10 +492,17 @@ def rule_filter(segments, threshold=0.3, use_llm_fallback=True):
     phase2_llm = config.get("llm_fallback", {}).get("phase2_filter", True)
     
     filtered = []
+    noise_skipped = 0  # v1.2.0 统计
     
     for segment in segments:
         content = segment.get("content", "") if isinstance(segment, dict) else segment
         source = segment.get("source", "unknown") if isinstance(segment, dict) else "unknown"
+        
+        # v1.2.0: 前置废话过滤（跳过明显废话，不进入 LLM）
+        is_noise_content, noise_category = is_noise(content)
+        if is_noise_content:
+            noise_skipped += 1
+            continue
         
         # 1. 规则判断
         rule_importance, rule_category = calculate_importance(content)

@@ -1,5 +1,15 @@
 # Memory System + QMD 深度集成设计文档
 
+## TL;DR
+- **目标**: 用 QMD 增强记忆系统的检索能力（BM25 + 向量 + Reranking）
+- **核心思想**: 记忆系统负责"筛选和理解"，QMD 负责"存储和检索"
+- **数据流**: 记忆系统筛选 → QMD 存储 → QMD 检索 → 记忆系统后处理
+- **新增函数**: export_for_qmd(), qmd_search(), qmd_available(), extract_memory_id_from_snippet()
+- **新增 Phase**: Phase 8 (QMD 索引更新)
+- **当前进度**: 设计完成，待实现
+
+---
+
 > **版本**: v1.2.0 设计稿
 > **日期**: 2026-02-10
 > **状态**: 待实现
