@@ -14,6 +14,7 @@ import os
 import sys
 import json
 import argparse
+import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
 import hashlib
@@ -1490,13 +1491,168 @@ def format_injection(results, confidence_threshold_high=0.8, confidence_threshol
     
     return output
 
-def router_search(query, memory_dir=None):
+# ============================================================
+# v1.2.0 QMD 集成
+# ============================================================
+
+def _get_qmd_env():
+    """获取 QMD 运行环境"""
+    home = os.path.expanduser('~')
+    return {
+        **os.environ,
+        'PATH': f"{home}/.bun/bin:{os.environ.get('PATH', '')}",
+        'NO_COLOR': '1',
+    }
+
+def qmd_available():
+    """检查 QMD 是否可用"""
+    try:
+        env = _get_qmd_env()
+        result = subprocess.run(
+            ['qmd', 'status'],
+            capture_output=True, timeout=5, env=env
+        )
+        # qmd status 成功返回 0
+        return result.returncode == 0
+    except:
+        return False
+
+def qmd_search(query, collection="curated", limit=20):
     """
-    Router 主入口：智能检索记忆
+    使用 QMD 进行检索
+    
+    参数:
+        query: 查询字符串
+        collection: QMD 集合名称
+        limit: 返回结果数量
+    
+    返回:
+        [{"docid": ..., "score": ..., "snippet": ..., "file": ...}, ...]
+        或空列表
+    """
+    try:
+        env = _get_qmd_env()
+        
+        # 提取关键词（优先英文/专有名词，然后中文实体词）
+        keywords = []
+        # 英文单词和专有名词（优先）
+        keywords.extend(re.findall(r'[A-Za-z][A-Za-z0-9_-]+', query))
+        # 中文词组（3字以上，避免"是谁"这类疑问词）
+        keywords.extend(re.findall(r'[\u4e00-\u9fa5]{3,}', query))
+        
+        # 如果没有提取到关键词，尝试2字中文词
+        if not keywords:
+            keywords.extend(re.findall(r'[\u4e00-\u9fa5]{2,}', query))
+        
+        # 如果还是没有，用原始查询
+        search_query = ' '.join(keywords) if keywords else query
+        
+        # 使用 BM25 搜索
+        result = subprocess.run(
+            ['qmd', 'search', search_query, '-c', collection, '-n', str(limit)],
+            capture_output=True, text=True, timeout=10, env=env
+        )
+        
+        if result.returncode == 0 and result.stdout.strip() and 'No results' not in result.stdout:
+            return _parse_qmd_output(result.stdout)
+            
+    except subprocess.TimeoutExpired:
+        pass
+    except Exception as e:
+        pass
+    
+    return []
+
+def _parse_qmd_output(output):
+    """解析 QMD search 输出"""
+    results = []
+    current = None
+    in_content = False
+    
+    for line in output.split('\n'):
+        # 新结果开始：qmd://curated/facts.md:7 #8ec92f
+        if line.startswith('qmd://'):
+            if current:
+                results.append(current)
+            parts = line.split()
+            file_info = parts[0] if parts else ""
+            docid = parts[1] if len(parts) > 1 else ""
+            current = {
+                "file": file_info.split(':')[0] if ':' in file_info else file_info,
+                "line": file_info.split(':')[1].split()[0] if ':' in file_info else "1",
+                "docid": docid,
+                "score": 0,
+                "snippet": ""
+            }
+            in_content = False
+        elif current:
+            if line.startswith('Score:'):
+                # Score:  35%
+                try:
+                    score_str = line.replace('Score:', '').strip().replace('%', '')
+                    current["score"] = float(score_str) / 100
+                except:
+                    pass
+            elif line.startswith('@@'):
+                # @@ -6,4 @@ 开始内容区域
+                in_content = True
+            elif line.startswith('Title:'):
+                pass  # 跳过
+            elif in_content and line.strip():
+                # 内容行
+                current["snippet"] += line + "\n"
+    
+    if current:
+        results.append(current)
+    
+    return results
+
+def extract_memory_id_from_snippet(snippet):
+    """
+    从 QMD 返回的 snippet 中提取 memory_id
+    
+    格式示例：
+    [f_20260207_a6b928] 用户名字是张玉魁...
+    """
+    match = re.search(r'\[([fbs]_\d{8}_[a-f0-9]+)\]', snippet)
+    return match.group(1) if match else None
+
+def export_for_qmd(memory_dir):
+    """
+    将 JSONL 转换为 QMD 友好的 Markdown 格式
+    """
+    qmd_index_dir = memory_dir / 'layer2/qmd-index'
+    qmd_index_dir.mkdir(parents=True, exist_ok=True)
+    
+    for mem_type in ['facts', 'beliefs', 'summaries']:
+        records = load_jsonl(memory_dir / f'layer2/active/{mem_type}.jsonl')
+        
+        md_content = f"# {mem_type.title()}\n\n"
+        md_content += f"> Generated: {now_iso()} | Count: {len(records)}\n\n"
+        
+        for r in records:
+            # 格式：[memory_id] 内容
+            md_content += f"[{r['id']}] {r['content']}\n\n"
+            
+            if r.get('entities'):
+                md_content += f"**Entities**: {', '.join(r['entities'])}\n\n"
+            
+            md_content += "---\n\n"
+        
+        output_path = qmd_index_dir / f'{mem_type}.md'
+        with open(output_path, 'w', encoding='utf-8') as f:
+            f.write(md_content)
+    
+    return qmd_index_dir
+
+def router_search(query, memory_dir=None, use_qmd=True):
+    """
+    Router 主入口：智能检索记忆（v1.2.0 QMD 增强版）
     
     参数:
         query: 用户查询
         memory_dir: 记忆目录（可选）
+        use_qmd: 是否使用 QMD 检索（默认 True）
     
     返回:
         {
@@ -1505,7 +1661,8 @@ def router_search(query, memory_dir=None):
             "query_type": "precise"/"topic"/"broad",
             "results": [...],
             "injection": {...},
-            "cached": bool
+            "cached": bool,
+            "qmd_used": bool  # v1.2.0 新增
         }
     """
     if memory_dir is None:
@@ -1524,13 +1681,38 @@ def router_search(query, memory_dir=None):
     query_type = classify_query_type(query, trigger_layer)
     config = QUERY_CONFIG[query_type]
     
-    # 3. 多路检索
+    # v1.2.0: 尝试使用 QMD 检索
+    qmd_results = []
+    qmd_used = False
+    if use_qmd and qmd_available():
+        qmd_raw = qmd_search(query, collection="curated", limit=config["initial"])
+        if qmd_raw and len(qmd_raw) > 0:
+            qmd_used = True
+            # 从 QMD 结果中提取 memory_id，加载完整记录
+            all_records = _load_all_active_records(memory_dir)
+            for qr in qmd_raw:
+                mem_id = extract_memory_id_from_snippet(qr.get("snippet", ""))
+                if mem_id and mem_id in all_records:
+                    record = all_records[mem_id].copy()
+                    record["qmd_score"] = qr.get("score", 0)
+                    record["match_source"] = "qmd"
+                    qmd_results.append(record)
+    
+    # 3. 多路检索（原有逻辑）
     keyword_results = keyword_search(query, memory_dir, limit=config["initial"])
     entity_results = entity_search(query, memory_dir, limit=config["initial"])
     
-    # 4. 合并去重
+    # 4. 合并去重（QMD 结果优先）
     seen_ids = set()
     merged_results = []
+    
+    # QMD 结果优先
+    for r in qmd_results:
+        if r["id"] not in seen_ids:
+            seen_ids.add(r["id"])
+            merged_results.append(r)
+    
+    # 然后是关键词和实体结果
     for r in keyword_results + entity_results:
         if r["id"] not in seen_ids:
             seen_ids.add(r["id"])
@@ -1556,9 +1738,11 @@ def router_search(query, memory_dir=None):
         "stats": {
             "keyword_hits": len(keyword_results),
             "entity_hits": len(entity_results),
+            "qmd_hits": len(qmd_results),
             "merged": len(merged_results),
             "final": len(final_results)
         },
+        "qmd_used": qmd_used,
         "cached": False
     }
     
@@ -1566,6 +1750,16 @@ def router_search(query, memory_dir=None):
     set_cached_result(query, result)
     
     return result
+
+def _load_all_active_records(memory_dir):
+    """加载所有活跃记录，返回 {id: record} 字典"""
+    records = {}
+    for mem_type in ['facts', 'beliefs', 'summaries']:
+        path = memory_dir / f'layer2/active/{mem_type}.jsonl'
+        for r in load_jsonl(path):
+            r['type'] = mem_type.rstrip('s')
+            records[r['id']] = r
+    return records
 
 def cmd_search(args):
     """执行记忆检索"""
@@ -2367,6 +2561,27 @@ def cmd_validate(args):
 # v1.2.0 动态注入命令
 # ============================================================
 
+def cmd_export_qmd(args):
+    """导出记忆为 QMD 索引格式"""
+    memory_dir = get_memory_dir()
+    
+    if not memory_dir.exists():
+        print("❌ 记忆系统未初始化")
+        return
+    
+    print("📤 导出记忆到 QMD 索引格式...")
+    qmd_index_dir = export_for_qmd(memory_dir)
+    
+    print(f"✅ 导出完成: {qmd_index_dir}")
+    for f in qmd_index_dir.glob('*.md'):
+        print(f"   - {f.name}")
+    
+    # 提示更新 QMD 索引
+    print()
+    print("💡 运行以下命令更新 QMD 索引:")
+    print(f"   qmd collection add {qmd_index_dir} --name curated --mask '*.md'")
+    print("   qmd update")
+
 def cmd_inject(args):
     """
     动态注入：根据用户消息检索相关记忆，输出可直接注入 prompt 的内容
@@ -2567,6 +2782,10 @@ def main():
     parser_inject.add_argument('--max-tokens', type=int, default=500, help='最大 token 数')
     parser_inject.add_argument('--format', choices=['text', 'json'], default='text', help='输出格式')
     parser_inject.set_defaults(func=cmd_inject)
+    
+    # v1.2.0 export-qmd 命令
+    parser_export_qmd = subparsers.add_parser('export-qmd', help='导出记忆为 QMD 索引格式')
+    parser_export_qmd.set_defaults(func=cmd_export_qmd)
     
     args = parser.parse_args()
     
