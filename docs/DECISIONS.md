@@ -147,3 +147,46 @@ memory/.qmd/
 ---
 *记录时间: 2026-02-12 04:34 UTC*
 *来源: Crabby 建议 + Ktao/Tkao 讨论*
+
+---
+
+## 2026-02-12: v1.2.2 白天轻量检查实现完成
+
+### 实现内容
+
+1. **URGENT_PATTERNS**: urgent 检测规则
+   - critical: 身份/健康/安全（threshold=0.9）
+   - important: 重要事件/决策（threshold=0.8）
+   - time_sensitive: 时间敏感（threshold=0.8）
+
+2. **Pending Buffer**: `layer2/pending.jsonl`
+   - Hot Store，搜索时优先查询
+   - 存放 urgent 标记的记忆
+
+3. **新增命令**:
+   - `add-pending`: 添加到 pending
+   - `view-pending`: 查看 pending
+   - `mini-consolidate`: 白天轻量检查
+
+4. **router_search() 增强**:
+   - 搜索顺序: pending > QMD > 关键词/实体 > LLM
+
+### 测试结果
+
+```
+$ memory.py add-pending "我对花生过敏，吃了会死"
+✅ Urgent: True, Importance: 0.9, Category: critical
+
+$ memory.py mini-consolidate
+✅ 处理: 6 → 保留: 3（废话被过滤）
+
+$ memory.py search "热存储"
+✅ 从 pending 中找到匹配结果
+```
+
+### 下一步
+
+配置白天 5 时间点 cron 任务。
+
+---
+*记录时间: 2026-02-12 04:50 UTC*
