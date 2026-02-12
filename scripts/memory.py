@@ -15,6 +15,7 @@ import sys
 import json
 import argparse
 import subprocess
+import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 import hashlib
@@ -1711,7 +1712,13 @@ def export_for_qmd(memory_dir):
 
 def router_search(query, memory_dir=None, use_qmd=True):
     """
-    Router 主入口：智能检索记忆（v1.2.0 QMD 增强版）
+    Router 主入口：智能检索记忆（v1.2.2 Hot Store 增强版）
+    
+    搜索顺序:
+    1. Pending (Hot Store) - 未索引的新记忆
+    2. QMD 索引 - 已索引，快速语义搜索
+    3. 关键词/实体索引 - 原有逻辑
+    4. LLM 兜底 - QMD 不可用时
     
     参数:
         query: 用户查询
@@ -1726,7 +1733,8 @@ def router_search(query, memory_dir=None, use_qmd=True):
             "results": [...],
             "injection": {...},
             "cached": bool,
-            "qmd_used": bool  # v1.2.0 新增
+            "qmd_used": bool,
+            "pending_hits": int  # v1.2.2 新增
         }
     """
     if memory_dir is None:
@@ -1745,10 +1753,13 @@ def router_search(query, memory_dir=None, use_qmd=True):
     query_type = classify_query_type(query, trigger_layer)
     config = QUERY_CONFIG[query_type]
     
+    # v1.2.2: 先搜索 Pending (Hot Store)
+    pending_results = search_pending(query, memory_dir)
+    
     # v1.2.0: 尝试使用 QMD 检索
     qmd_results = []
     qmd_used = False
-    if use_qmd and qmd_available():
+    if use_qmd and qmd_available(memory_dir):
         qmd_raw = qmd_search(query, collection="curated", limit=config["initial"])
         if qmd_raw and len(qmd_raw) > 0:
             qmd_used = True
@@ -1766,11 +1777,17 @@ def router_search(query, memory_dir=None, use_qmd=True):
     keyword_results = keyword_search(query, memory_dir, limit=config["initial"])
     entity_results = entity_search(query, memory_dir, limit=config["initial"])
     
-    # 4. 合并去重（QMD 结果优先）
+    # 4. 合并去重（Pending > QMD > 关键词/实体）
     seen_ids = set()
     merged_results = []
     
-    # QMD 结果优先
+    # v1.2.2: Pending 结果最优先
+    for r in pending_results:
+        if r["id"] not in seen_ids:
+            seen_ids.add(r["id"])
+            merged_results.append(r)
+    
+    # QMD 结果次优先
     for r in qmd_results:
         if r["id"] not in seen_ids:
             seen_ids.add(r["id"])
@@ -1800,6 +1817,7 @@ def router_search(query, memory_dir=None, use_qmd=True):
         "results": final_results,
         "injection": injection,
         "stats": {
+            "pending_hits": len(pending_results),  # v1.2.2 新增
             "keyword_hits": len(keyword_results),
             "entity_hits": len(entity_results),
             "qmd_hits": len(qmd_results),
@@ -1807,6 +1825,7 @@ def router_search(query, memory_dir=None, use_qmd=True):
             "final": len(final_results)
         },
         "qmd_used": qmd_used,
+        "pending_hits": len(pending_results),  # v1.2.2 新增
         "cached": False
     }
     
@@ -2789,6 +2808,299 @@ def cmd_validate(args):
 # 主入口
 # ============================================================
 
+# ============================================================
+# v1.2.2 白天轻量检查（Mini-Consolidate）
+# ============================================================
+
+# Urgent 检测规则（重要性 > 0.8 的内容）
+URGENT_PATTERNS = {
+    # 身份/健康/安全相关 - 最高优先级
+    "critical": {
+        "keywords": ["过敏", "疾病", "死", "生命", "紧急", "危险", "急救",
+                     "密码", "账号", "银行卡", "身份证"],
+        "threshold": 0.9
+    },
+    # 重要事件/决策
+    "important": {
+        "keywords": ["记住", "永远记住", "一定要记住", "重要", "关键",
+                     "决定", "确定", "最终"],
+        "threshold": 0.8
+    },
+    # 时间敏感（带明确时间点）
+    "time_sensitive": {
+        "patterns": [
+            r"(今天|明天|后天|下周|下个月).*(必须|一定|截止|deadline)",
+            r"(必须|一定).*(今天|明天|后天|下周)",
+        ],
+        "threshold": 0.8
+    }
+}
+
+def check_urgency(content: str) -> tuple[bool, float, str]:
+    """
+    检测内容是否为 urgent（需要优先处理）
+    
+    返回:
+        (is_urgent, importance_score, matched_category)
+    """
+    content_lower = content.lower()
+    
+    # 检查关键词规则
+    for category, rule in URGENT_PATTERNS.items():
+        threshold = rule.get("threshold", 0.8)
+        
+        # 关键词匹配
+        if "keywords" in rule:
+            for keyword in rule["keywords"]:
+                if keyword in content:
+                    return True, threshold, category
+        
+        # 正则匹配
+        if "patterns" in rule:
+            for pattern in rule["patterns"]:
+                if re.search(pattern, content):
+                    return True, threshold, category
+    
+    return False, 0.5, ""
+
+def load_pending(memory_dir) -> list:
+    """加载 pending buffer"""
+    pending_path = Path(memory_dir) / 'layer2/pending.jsonl'
+    if pending_path.exists():
+        return load_jsonl(pending_path)
+    return []
+
+def save_pending(memory_dir, records: list):
+    """保存 pending buffer"""
+    pending_path = Path(memory_dir) / 'layer2/pending.jsonl'
+    pending_path.parent.mkdir(parents=True, exist_ok=True)
+    save_jsonl(pending_path, records)
+
+def add_to_pending(memory_dir, content: str, source: str = "user") -> dict:
+    """
+    添加内容到 pending buffer
+    
+    返回添加的记录
+    """
+    is_urgent, importance, category = check_urgency(content)
+    
+    record = {
+        "id": f"p_{datetime.now().strftime('%Y%m%d')}_{uuid.uuid4().hex[:6]}",
+        "content": content,
+        "source": source,
+        "created": now_iso(),
+        "urgent": is_urgent,
+        "importance": importance,
+        "category": category
+    }
+    
+    pending = load_pending(memory_dir)
+    pending.append(record)
+    save_pending(memory_dir, pending)
+    
+    return record
+
+def search_pending(query: str, memory_dir=None) -> list:
+    """
+    搜索 pending buffer（Hot Store）
+    简单关键词匹配，用于 router_search 的第一优先级
+    """
+    if memory_dir is None:
+        memory_dir = get_memory_dir()
+    
+    pending = load_pending(memory_dir)
+    if not pending:
+        return []
+    
+    results = []
+    query_lower = query.lower()
+    query_words = set(re.findall(r'[\u4e00-\u9fa5]+|[a-zA-Z]+', query_lower))
+    
+    for record in pending:
+        content_lower = record.get('content', '').lower()
+        # 简单匹配：查询词出现在内容中
+        score = 0
+        for word in query_words:
+            if word in content_lower:
+                score += 1
+        
+        if score > 0:
+            record_copy = record.copy()
+            # 补充 router_search 需要的字段
+            record_copy['type'] = 'pending'
+            record_copy['score'] = record.get('importance', 0.5)
+            record_copy['final_score'] = record.get('importance', 0.5)
+            record_copy['match_score'] = score / len(query_words) if query_words else 0
+            record_copy['match_source'] = 'pending'
+            record_copy['entities'] = []
+            results.append(record_copy)
+    
+    # 按匹配分数排序
+    results.sort(key=lambda x: x['match_score'], reverse=True)
+    return results
+
+def cmd_mini_consolidate(args):
+    """
+    白天轻量检查：只处理 pending buffer
+    
+    流程:
+    1. 读取 pending.jsonl
+    2. Phase 2: 筛选（规则 + LLM 兜底）
+    3. Phase 3: 提取（模板 + LLM）
+    4. 写入 layer2/active/
+    5. 清空 pending.jsonl
+    6. 更新 Layer 1 快照（可选）
+    """
+    memory_dir = get_memory_dir()
+    pending = load_pending(memory_dir)
+    
+    if not pending:
+        print("📭 Pending buffer 为空，无需处理")
+        return
+    
+    print(f"🔄 Mini-Consolidate 开始")
+    print(f"   待处理: {len(pending)} 条")
+    
+    # 统计 urgent
+    urgent_count = len([p for p in pending if p.get('urgent')])
+    print(f"   其中 urgent: {urgent_count} 条")
+    
+    # Phase 2: 筛选
+    print("\n🔍 Phase 2: 筛选")
+    kept = []
+    for record in pending:
+        content = record.get('content', '')
+        
+        # 废话检测
+        is_noise_result, noise_category = is_noise(content)
+        if is_noise_result:
+            print(f"   ❌ 跳过废话: {content[:30]}... ({noise_category})")
+            continue
+        
+        # urgent 直接保留
+        if record.get('urgent'):
+            print(f"   ✅ 保留 (urgent): {content[:30]}...")
+            kept.append(record)
+            continue
+        
+        # 规则筛选
+        importance, category = calculate_importance(content)
+        if importance >= 0.5:
+            record['importance'] = importance
+            record['category'] = category
+            print(f"   ✅ 保留 (importance={importance:.1f}): {content[:30]}...")
+            kept.append(record)
+        else:
+            print(f"   ❌ 跳过 (importance={importance:.1f}): {content[:30]}...")
+    
+    print(f"   筛选后: {len(kept)} 条")
+    
+    if not kept:
+        # 清空 pending
+        save_pending(memory_dir, [])
+        print("\n✅ Mini-Consolidate 完成（无有效内容）")
+        return
+    
+    # Phase 3: 提取
+    print("\n📝 Phase 3: 提取")
+    extracted = []
+    for record in kept:
+        content = record['content']
+        importance = record.get('importance', 0.5)
+        
+        # 提取实体
+        entities = extract_entities(content)
+        
+        # 构建新记录
+        new_record = {
+            "id": f"f_{datetime.now().strftime('%Y%m%d')}_{uuid.uuid4().hex[:6]}",
+            "content": content,
+            "type": "fact",
+            "category": record.get('category', 'general'),
+            "importance": importance,
+            "score": importance,
+            "created": record.get('created', now_iso()),
+            "updated": now_iso(),
+            "entities": entities,
+            "source": "mini-consolidate"
+        }
+        extracted.append(new_record)
+        print(f"   ✅ 提取: {content[:40]}...")
+    
+    # 写入 active pool
+    print("\n💾 写入 active pool")
+    for record in extracted:
+        mem_type = record['type'] + 's'  # fact -> facts
+        if mem_type not in ['facts', 'beliefs', 'summaries']:
+            mem_type = 'facts'
+        
+        active_path = memory_dir / f'layer2/active/{mem_type}.jsonl'
+        existing = load_jsonl(active_path)
+        existing.append(record)
+        save_jsonl(active_path, existing)
+    
+    print(f"   写入 {len(extracted)} 条记录")
+    
+    # 清空 pending
+    save_pending(memory_dir, [])
+    print("   清空 pending buffer")
+    
+    # 更新 QMD 索引（如果可用）
+    if qmd_available(memory_dir):
+        print("\n🔍 更新 QMD 索引")
+        try:
+            export_for_qmd(memory_dir)
+            print("   ✅ 完成")
+        except Exception as e:
+            print(f"   ⚠️ 失败: {e}")
+    
+    print(f"\n✅ Mini-Consolidate 完成")
+    print(f"   处理: {len(pending)} → 保留: {len(extracted)}")
+
+def cmd_add_pending(args):
+    """添加内容到 pending buffer"""
+    memory_dir = get_memory_dir()
+    content = args.content
+    source = args.source
+    
+    record = add_to_pending(memory_dir, content, source)
+    
+    print(f"✅ 已添加到 pending buffer")
+    print(f"   ID: {record['id']}")
+    print(f"   Urgent: {record['urgent']}")
+    print(f"   Importance: {record['importance']:.1f}")
+    if record.get('category'):
+        print(f"   Category: {record['category']}")
+
+def cmd_view_pending(args):
+    """查看 pending buffer"""
+    memory_dir = get_memory_dir()
+    pending = load_pending(memory_dir)
+    
+    if not pending:
+        print("📭 Pending buffer 为空")
+        return
+    
+    print(f"📋 Pending Buffer ({len(pending)} 条)")
+    print("=" * 50)
+    
+    urgent_count = 0
+    for i, record in enumerate(pending):
+        is_urgent = record.get('urgent', False)
+        if is_urgent:
+            urgent_count += 1
+        
+        urgent_mark = "🔴" if is_urgent else "⚪"
+        importance = record.get('importance', 0.5)
+        content = record.get('content', '')[:50]
+        created = record.get('created', '')[:16]
+        
+        print(f"{urgent_mark} [{i+1}] {content}...")
+        print(f"   importance={importance:.1f} | {created}")
+    
+    print("=" * 50)
+    print(f"总计: {len(pending)} 条 | Urgent: {urgent_count} 条")
+
 def main():
     parser = argparse.ArgumentParser(
         description='Memory System v1.0 - 三层记忆架构 CLI',
@@ -2876,6 +3188,20 @@ def main():
     parser_export_qmd = subparsers.add_parser('export-qmd', help='导出记忆为 QMD 索引格式')
     parser_export_qmd.set_defaults(func=cmd_export_qmd)
     
+    # v1.2.2: Mini-Consolidate 命令
+    parser_mini = subparsers.add_parser('mini-consolidate', help='白天轻量检查：只处理 pending buffer')
+    parser_mini.set_defaults(func=cmd_mini_consolidate)
+    
+    # v1.2.2: 添加到 pending 命令
+    parser_add_pending = subparsers.add_parser('add-pending', help='添加内容到 pending buffer')
+    parser_add_pending.add_argument('content', help='要添加的内容')
+    parser_add_pending.add_argument('--source', default='user', help='来源标记')
+    parser_add_pending.set_defaults(func=cmd_add_pending)
+    
+    # v1.2.2: 查看 pending 命令
+    parser_view_pending = subparsers.add_parser('view-pending', help='查看 pending buffer')
+    parser_view_pending.set_defaults(func=cmd_view_pending)
+    
     args = parser.parse_args()
     
     if args.command is None:
@@ -2886,3 +3212,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
