@@ -44,16 +44,22 @@ class MemoryOperator:
         '单位换算', '多少钱', '怎么走'
     ]
     
-    def __init__(self, llm_client=None, similarity_threshold: float = 0.7):
+    def __init__(self, llm_client=None, similarity_threshold: float = 0.7, backend=None):
         """
         初始化
         
         Args:
             llm_client: LLM 客户端（可选，用于复杂决策）
             similarity_threshold: 语义相似度阈值
+            backend: SQLite 后端（用于冲突解决）
         """
         self.llm_client = llm_client
         self.similarity_threshold = similarity_threshold
+        self.backend = backend
+        
+        # 冲突解决器
+        from conflict_resolver import ConflictResolver
+        self.conflict_resolver = ConflictResolver(backend=backend)
         
         # 统计信息
         self.stats = {
@@ -329,10 +335,7 @@ class MemoryOperator:
         """
         基于规则的决策（简单场景）
         
-        决策逻辑：
-        1. 时间优先：新记忆 > 旧记忆
-        2. 置信度优先：高置信度 > 低置信度
-        3. 来源优先：用户陈述 > 推断
+        使用 ConflictResolver 进行智能决策
         
         Args:
             new_memory: 新记忆
@@ -344,52 +347,18 @@ class MemoryOperator:
         # 选择最相关的冲突（第一个）
         target = conflicts[0]
         
-        # 计算综合评分
-        score = self._calculate_conflict_score(new_memory, target)
+        # 使用 ConflictResolver 解决冲突
+        resolution = self.conflict_resolver.resolve(new_memory, target)
         
-        if score > 0:
-            # 新记忆更可靠 → UPDATE
+        action = resolution['action']
+        
+        if action == 'UPDATE':
             return ('UPDATE', target)
-        elif score < -0.5:
-            # 旧记忆明显更可靠 → NOOP
+        elif action == 'KEEP':
             return ('NOOP', None)
-        else:
-            # 不确定 → ADD（保留两条）
+        else:  # MERGE
             return ('ADD', None)
     
-    def _calculate_conflict_score(self, new: Dict, old: Dict) -> float:
-        """
-        计算冲突评分
-        
-        Returns:
-            > 0: 新记忆更可靠
-            < 0: 旧记忆更可靠
-            = 0: 不确定
-        """
-        score = 0.0
-        
-        # 1. 时间戳比较（权重 0.5）
-        new_time = new.get('timestamp', '')
-        old_time = old.get('timestamp', '')
-        
-        if new_time and old_time:
-            if new_time > old_time:
-                score += 0.5
-            else:
-                score -= 0.5
-        
-        # 2. 置信度比较（权重 0.3）
-        new_conf = new.get('confidence', 0.5)
-        old_conf = old.get('confidence', 0.5)
-        score += (new_conf - old_conf) * 0.3
-        
-        # 3. 来源优先级（权重 0.2）
-        source_priority = {'user': 3, 'assistant': 2, 'third_party': 1}
-        new_source = source_priority.get(new.get('ownership', 'assistant'), 2)
-        old_source = source_priority.get(old.get('ownership', 'assistant'), 2)
-        score += (new_source - old_source) * 0.2 / 2  # 归一化到 [-0.2, 0.2]
-        
-        return score
     
     # ================================================================
     # 工具方法
