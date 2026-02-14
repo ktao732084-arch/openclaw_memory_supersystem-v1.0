@@ -61,6 +61,10 @@ class MemoryOperator:
         from conflict_resolver import ConflictResolver
         self.conflict_resolver = ConflictResolver(backend=backend)
         
+        # 噪声过滤器
+        from noise_filter import NoiseFilter
+        self.noise_filter = NoiseFilter(llm_client=llm_client, strict_mode=False)
+        
         # 统计信息
         self.stats = {
             'total': 0,
@@ -141,13 +145,7 @@ class MemoryOperator:
     
     def _is_obvious_noise(self, memory: Dict) -> bool:
         """
-        检查是否为明确的噪声（保守策略）
-        
-        只过滤明确的噪声：
-        - 数学计算
-        - 单位换算
-        - 时间/天气查询
-        - 临时指令
+        检查是否为明确的噪声（使用 NoiseFilter）
         
         Args:
             memory: 记忆字典
@@ -155,22 +153,7 @@ class MemoryOperator:
         Returns:
             是否为噪声
         """
-        content = memory.get('content', '')
-        
-        # 规则 1: 正则匹配
-        for pattern in self.NOISE_PATTERNS:
-            if re.search(pattern, content, re.IGNORECASE):
-                return True
-        
-        # 规则 2: 关键词匹配
-        if any(kw in content for kw in self.NOISE_KEYWORDS):
-            return True
-        
-        # 规则 3: 长度过滤（太短的通常是噪声）
-        if len(content.strip()) < 5:
-            return True
-        
-        return False
+        return self.noise_filter.is_noise(memory)
     
     # ================================================================
     # 第二层：语义相似度检测
