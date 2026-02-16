@@ -1,0 +1,50 @@
+[
+  {
+    "click_cnt": 4,
+    "clue_pay_order_cnt": 0,
+    "convert_cnt": 0,
+    "project_id": 7604681945927499811,
+    "project_name": "抗衰法令纹_02_09_01",
+    "promotion_id": 7604686719380537359,
+    "promotion_name": "抗衰超声炮法令纹_02_09",
+    "show_cnt": 1338,
+    "stat_cost": 118.36,
+    "stat_time_day": "2026-02-11"
+  },
+  {
+    "click_cnt": 45,
+    "clue_pay_order_cnt": 0,
+    "convert_cnt": 3,
+    "project_id": 7604417730327199784,
+    "project_name": "热玛吉_2_08",
+    "promotion_id": 7604418424915820607,
+    "promotion_name": "热玛吉_02_08",
+    "show_cnt": 5833,
+    "stat_cost": 700.0,
+    "stat_time_day": "2026-02-11"
+  },
+  {
+    "click_cnt": 67,
+    "clue_pay_order_cnt": 0,
+    "convert_cnt": 5,
+    "project_id": 7600349840568320041,
+    "project_name": "黄金微针_01_28",
+    "promotion_id": 7600351168191610923,
+    "promotion_name": "黄金微针私信_01_28",
+    "show_cnt": 13161,
+    "stat_cost": 1073.98,
+    "stat_time_day": "2026-02-11"
+  },
+  {
+    "click_cnt": 8,
+    "clue_pay_order_cnt": 0,
+    "convert_cnt": 0,
+    "project_id": 7597366721171898383,
+    "project_name": "黄金微针_01_20_01_01",
+    "promotion_id": 7597368362046668852,
+    "promotion_name": "黄金微针私信_01_20",
+    "show_cnt": 2867,
+    "stat_cost": 107.66,
+    "stat_time_day": "2026-02-11"
+  }
+]
