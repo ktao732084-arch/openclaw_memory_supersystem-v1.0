@@ -1,0 +1,22 @@
+# 排除个人信息和敏感数据
+.git
+.gitignore
+*.backup
+*.db
+*.db-shm
+*.db-wal
+.qmd
+__pycache__
+*.pyc
+*.pyo
+.DS_Store
+.env
+.token_cache.json
+
+# 排除测试数据
+test_*.py
+*_test.py
+
+# 排除临时文件
+*.tmp
+*.log

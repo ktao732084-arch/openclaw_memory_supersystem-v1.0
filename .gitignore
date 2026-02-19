@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+*.db
+*.db-journal
+memory/
+.qmd/
