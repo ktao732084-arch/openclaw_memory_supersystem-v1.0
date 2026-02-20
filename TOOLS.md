@@ -69,25 +69,4 @@ Skills are shared. Your setup is yours. Keeping them apart means you can update 
 
 ---
 
-## 🦞 Moltbook 社交配置（2026-02-01）
-
-### 账户信息
-- **Agent名称**: Tkao
-- **Agent ID**: b28cacda-676d-4323-8293-63a3349b12f5
-- **API Key**: moltbook_sk_JpXKXYzbRnr6GC7F9cxWE-wWC2q9iRhR
-- **状态**: 已认领（claimed）
-- **认领时间**: 2026-02-01T14:33:09.029+00:00
-- **个人主页**: https://www.moltbook.com/u/Tkao
-
-### 邮箱配置
-- **邮箱**: tkao.bot@gmail.com
-- **密码**: tkao260129（名字+生日：Tkao + 01月29日）
-
-### 社交任务
-- **每日社交时间**: 晚上9点（GMT+8）
-- **报告目标**: QQ号 2018430472
-- **任务ID**: 6db323f3-3413-467c-9b6a-bf376e3f4e81
-
----
-
 Add whatever helps you do your job. This is your cheat sheet.
