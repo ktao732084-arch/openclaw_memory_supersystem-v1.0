@@ -153,7 +153,7 @@ def get_llm_config():
     }
 
 
-def call_llm(prompt, system_prompt=None, max_tokens=500):
+def call_llm(prompt, system_prompt=None, max_tokens=1000):
     """
     调用 LLM(使用用户的 API Key)
 
@@ -185,7 +185,12 @@ def call_llm(prompt, system_prompt=None, max_tokens=500):
 
         if response.status_code == 200:
             result = response.json()
-            content = result["choices"][0]["message"]["content"]
+            message = result["choices"][0]["message"]
+            content = message.get("content", "")
+
+            # 兼容思考模型（GLM-4.5-air 等）：content 为空时尝试 reasoning_content
+            if not content.strip():
+                content = message.get("reasoning_content", "")
 
             # 统计 token 使用
             usage = result.get("usage", {})
@@ -743,7 +748,7 @@ def llm_filter_segment(content):
 
 返回 JSON:"""
 
-    success, result, error = call_llm(prompt, system_prompt, max_tokens=100)
+    success, result, error = call_llm(prompt, system_prompt, max_tokens=500)
 
     if success:
         try:

@@ -21,11 +21,13 @@ from typing import Any, Dict, List, Optional, Tuple
 
 LLM_INTEGRATION_CONFIG = {
     # LLM 触发策略
+    # v1.5.2 修正：原 high_confidence_threshold=0.5 导致规则默认分(0.5)全部绕过LLM
+    # 现在只有规则明确识别的高价值内容(>=0.7)才跳过LLM
     "trigger": {
-        "high_confidence_threshold": 0.5,  # 高于此值，规则直接接受（除非语义复杂）
-        "low_confidence_threshold": 0.2,  # 低于此值，检查语义复杂度
-        "uncertain_range": (0.2, 0.5),  # 不确定区间，交给 LLM
-        "force_llm_on_complex": True,  # 复杂内容强制 LLM
+        "high_confidence_threshold": 0.7,  # 高于此值，规则直接接受（除非语义复杂）
+        "low_confidence_threshold": 0.15,  # 低于此值，检查语义复杂度
+        "uncertain_range": (0.15, 0.7),   # 不确定区间，交给 LLM（覆盖所有默认0.5内容）
+        "force_llm_on_complex": True,      # 复杂内容强制 LLM
     },
     # 语义复杂度检测
     "complexity": {
@@ -194,10 +196,10 @@ def detect_semantic_complexity(content: str) -> Dict[str, Any]:
     score = min(score, 1.0)
 
     # 判断是否复杂
-    is_complex = score >= 0.4
+    is_complex = score >= 0.3   # v1.5.2: 降低阈值，更多内容触发LLM
 
     # 判断是否应该使用 LLM
-    should_use_llm = score >= 0.3  # 稍微宽松一点
+    should_use_llm = score >= 0.2  # 稍微宽松一点
 
     return {
         "is_complex": is_complex,
@@ -431,17 +433,17 @@ def smart_filter_segment(
     system_prompt = """你是一个记忆重要性评估专家。评估用户输入的重要性（0-1），并分类。
 
 分类标准：
-- identity_health_safety (0.9-1.0): 身份、健康、安全、过敏、密码、密钥
-- preference_relation (0.7-0.9): 偏好、关系、态度、观点
-- project_task (0.5-0.7): 项目、任务、目标、计划
-- general_fact (0.3-0.5): 一般事实、描述
-- temporary (0.1-0.3): 临时信息、闲聊
+- identity_health_safety (0.85-1.0): 身份信息（姓名/学校/专业/职业/年龄）、健康、安全、过敏、密码、密钥
+- preference_relation (0.7-0.85): 偏好、关系、态度、观点、情感评价
+- project_task (0.5-0.7): 项目进展、任务、目标、计划、技术成果
+- general_fact (0.3-0.5): 一般事实、描述、日常对话
+- temporary (0.1-0.3): 临时信息、简单闲聊、无实质内容
 
 注意：
-1. 如果内容包含健康风险（如过敏），必须给高分
-2. 如果内容包含安全信息（如密码），必须给高分
-3. 如果内容包含人际关系变化，给中高分
-4. 如果内容是简单闲聊，给低分
+1. 身份信息（姓名、学校、专业、职业）必须给 identity_health_safety 高分
+2. 健康风险（如过敏）必须给最高分
+3. 项目技术进展给 project_task 中分
+4. 简单闲聊给低分
 
 返回 JSON：{"importance": 0.8, "category": "preference_relation", "reason": "简短理由"}"""
 
@@ -458,7 +460,7 @@ def smart_filter_segment(
         fallback_result=fallback_result,
         api_key=api_key,
         config_dict=config_dict,
-        max_tokens=100,
+        max_tokens=500,
     )
 
     result["llm_stats"] = stats
