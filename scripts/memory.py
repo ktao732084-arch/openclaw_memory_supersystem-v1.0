@@ -2814,6 +2814,36 @@ def cmd_consolidate(args):
                     print(f"   ⚠️ QMD 更新失败: {e}")
                     print("   继续使用基础索引...")
 
+        # Phase 6.8: 主动记忆引擎更新（v1.4.0 新增）
+        if PROACTIVE_ENABLED and (not args.phase or args.phase in [6, 7]):
+            try:
+                print("\n🤖 Phase 6.8: 主动记忆引擎更新")
+                proactive_engine = create_engine(memory_dir)
+
+                # 用最新的 facts 喂给引擎，更新意图状态
+                recent_facts = load_jsonl(memory_dir / "layer2/active/facts.jsonl")
+                recent_facts.sort(key=lambda x: x.get("created", ""), reverse=True)
+
+                fed_count = 0
+                for fact in recent_facts[:20]:  # 只取最新 20 条
+                    proactive_engine.process_message(fact.get("content", ""), role="user")
+                    fed_count += 1
+
+                # 保存引擎状态
+                proactive_engine.save_state()
+
+                # 获取主动建议
+                suggestion = proactive_engine.get_next_suggestion()
+                stats = proactive_engine.get_stats()
+                print(f"   喂入记忆: {fed_count} 条")
+                print(f"   意图检测: {stats.get('intents_detected', 0)} 个")
+                print(f"   主动建议: {stats.get('suggestions_generated', 0)} 条")
+                if suggestion:
+                    print(f"   最新建议: [{suggestion.type}] {suggestion.content[:50]}...")
+                print("   ✅ 完成")
+            except Exception as e:
+                print(f"   ⚠️ 主动记忆引擎更新失败: {e}")
+
         # Phase 7: Layer 1 快照
         if not args.phase or args.phase == 7:
             print("\n📸 Phase 7: Layer 1 快照")
