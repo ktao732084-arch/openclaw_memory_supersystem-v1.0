@@ -91,6 +91,20 @@ except ImportError:
     HALLUCINATION_DEFENSE_ENABLED = False
     _noise_filter_instance = None
 
+# 导入 v1.4.0 时序引擎模块
+try:
+    from temporal_engine import (
+        TemporalQueryEngine,
+        FactEvolutionTracker,
+        EvidenceTracker,
+        create_temporal_engine,
+        create_evolution_tracker,
+        create_evidence_tracker,
+    )
+    TEMPORAL_ENGINE_ENABLED = True
+except ImportError:
+    TEMPORAL_ENGINE_ENABLED = False
+
 # 导入扩展后端模块（阈值控制，>5000 条自动启用）
 try:
     from scaled_backend import ScaledBackend
@@ -1936,6 +1950,41 @@ def router_search(query, memory_dir=None, use_qmd=True, use_vector=True):
     if cached:
         cached["cached"] = True
         return cached
+
+    # v1.4.0: 时序查询前置——有时间表达式时优先走时序引擎
+    if TEMPORAL_ENGINE_ENABLED:
+        try:
+            temporal_engine = create_temporal_engine(memory_dir)
+            temporal_result = temporal_engine.temporal_search(query)
+            if temporal_result["has_temporal"] and temporal_result["results"]:
+                injection = format_injection(temporal_result["results"])
+                result = {
+                    "trigger_layer": 0,
+                    "trigger_type": "temporal",
+                    "matched_keywords": [],
+                    "query_type": "precise",
+                    "results": temporal_result["results"],
+                    "injection": injection,
+                    "stats": {
+                        "pending_hits": 0,
+                        "vector_hits": 0,
+                        "keyword_hits": 0,
+                        "entity_hits": 0,
+                        "qmd_hits": 0,
+                        "merged": len(temporal_result["results"]),
+                        "final": len(temporal_result["results"]),
+                    },
+                    "qmd_used": False,
+                    "vector_used": False,
+                    "pending_hits": 0,
+                    "cached": False,
+                    "temporal_used": True,
+                    "time_range": temporal_result["time_range"],
+                }
+                set_cached_result(query, result)
+                return result
+        except Exception:
+            pass  # 降级到原有检索流程
 
     trigger_layer, trigger_type, matched_keywords = detect_trigger_layer(query)
 
