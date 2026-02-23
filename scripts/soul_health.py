@@ -154,6 +154,53 @@ def print_soul_report(report):
     print(f"{'='*40}\n")
 
 
+def save_soul_history(report, memory_dir=None):
+    """把 Soul Score 追加到历史记录"""
+    if memory_dir is None:
+        memory_dir = get_memory_dir()
+    history_path = Path(memory_dir) / "state/soul_history.jsonl"
+    history_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(history_path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(report, ensure_ascii=False) + "\n")
+
+
+def load_soul_history(memory_dir=None, limit=30):
+    """加载历史 Soul Score"""
+    if memory_dir is None:
+        memory_dir = get_memory_dir()
+    history_path = Path(memory_dir) / "state/soul_history.jsonl"
+    if not history_path.exists():
+        return []
+    records = []
+    with open(history_path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                try:
+                    records.append(json.loads(line))
+                except Exception:
+                    pass
+    return records[-limit:]
+
+
+def print_soul_trend(memory_dir=None):
+    """打印最近 7 次 Soul Score 趋势"""
+    history = load_soul_history(memory_dir, limit=7)
+    if not history:
+        print("  暂无历史数据")
+        return
+    print("  近期趋势:")
+    for r in history:
+        date = r.get("computed_at", "")[:10]
+        score = r.get("soul_score", 0)
+        emoji = r.get("risk_emoji", "")
+        print(f"    {date}  {score:.3f} {emoji}")
+
+
 if __name__ == "__main__":
     report = compute_soul_score()
     print_soul_report(report)
+    print_soul_trend()
+
+
+

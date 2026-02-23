@@ -1585,6 +1585,9 @@ def keyword_search(query, memory_dir, limit=20):
                     "importance": mem.get("importance", 0.5),
                     "memory_score": mem.get("score", 0.5),
                     "type": "fact" if mem_id.startswith("f_") else ("belief" if mem_id.startswith("b_") else "summary"),
+                    "entities": mem.get("entities", []),
+                    "last_accessed": mem.get("last_accessed"),
+                    "is_identity": mem.get("is_identity", False),
                 }
             )
 
@@ -1639,6 +1642,9 @@ def entity_search(query, memory_dir, limit=20):
                     "importance": mem.get("importance", 0.5),
                     "memory_score": mem.get("score", 0.5),
                     "type": "fact" if mem_id.startswith("f_") else ("belief" if mem_id.startswith("b_") else "summary"),
+                    "entities": mem.get("entities", []),
+                    "last_accessed": mem.get("last_accessed"),
+                    "is_identity": mem.get("is_identity", False),
                 }
             )
 
@@ -1719,6 +1725,74 @@ def rerank_results(results, query, limit, memory_dir=None):
     # 3. 按综合分数排序
     results.sort(key=lambda x: x["final_score"], reverse=True)
     return results[:limit]
+
+
+def spreading_activation(results, query, memory_dir, spread_factor=0.3, max_spread=5):
+    """
+    Spreading Activation（ACT-R 启发）
+    检索结果中的实体通过共现关系激活关联记忆
+
+    spread_factor: 激活传播衰减系数（默认 0.3）
+    max_spread: 每个实体最多激活的额外记忆数
+    """
+    if not results:
+        return results
+
+    # 收集已有结果的实体
+    activated_entities = set()
+    existing_ids = {r["id"] for r in results}
+    for r in results[:5]:  # 只从 top-5 传播，避免噪声
+        activated_entities.update(r.get("entities", []))
+
+    if not activated_entities:
+        return results
+
+    # 加载 relations 和 facts
+    relations_path = Path(memory_dir) / "layer2/index/relations.json"
+    facts_path = Path(memory_dir) / "layer2/active/facts.jsonl"
+    if not relations_path.exists() or not facts_path.exists():
+        return results
+
+    try:
+        relations = json.loads(relations_path.read_text())
+        all_facts = load_jsonl(facts_path)
+    except Exception:
+        return results
+
+    # 建立 id→fact 索引
+    fact_index = {f["id"]: f for f in all_facts}
+
+    # 通过共现关系找关联记忆
+    spread_records = []
+    seen_spread = set()
+
+    for entity in activated_entities:
+        entity_data = relations.get(entity, {})
+        related_fact_ids = entity_data.get("facts", []) if isinstance(entity_data, dict) else []
+
+        count = 0
+        for fid in related_fact_ids:
+            if fid in existing_ids or fid in seen_spread:
+                continue
+            fact = fact_index.get(fid)
+            if not fact:
+                continue
+            fact_copy = fact.copy()
+            # 传播激活：原始 final_score × spread_factor
+            base_score = fact_copy.get("final_score", fact_copy.get("importance", 0.5))
+            fact_copy["final_score"] = base_score * spread_factor
+            fact_copy["spread_from"] = entity
+            # 确保 type 字段存在
+            if "type" not in fact_copy:
+                fid = fact_copy.get("id", "")
+                fact_copy["type"] = "fact" if fid.startswith("f_") else ("belief" if fid.startswith("b_") else "summary")
+            spread_records.append(fact_copy)
+            seen_spread.add(fid)
+            count += 1
+            if count >= max_spread:
+                break
+
+    return results + spread_records
 
 
 def format_injection(results, confidence_threshold_high=0.8, confidence_threshold_low=0.5):
@@ -2102,7 +2176,20 @@ def router_search(query, memory_dir=None, use_qmd=True, use_vector=True):
 
     reranked = rerank_results(merged_results, query, config["rerank"], memory_dir=memory_dir)
 
-    final_results = reranked[: config["final"]]
+    # v1.5.0: Spreading Activation（ACT-R）
+    # spread 记录单独保留 top-3，追加到 final 结果末尾
+    try:
+        spread_all = spreading_activation(reranked, query, memory_dir)
+        spread_bonus = [r for r in spread_all if r.get("spread_from")]
+        spread_bonus.sort(key=lambda x: x["final_score"], reverse=True)
+        spread_bonus = spread_bonus[:3]
+    except Exception as e:
+        import traceback
+        print(f"⚠️  Spreading Activation 失败: {e}")
+        traceback.print_exc()
+        spread_bonus = []
+
+    final_results = reranked[: config["final"]] + spread_bonus
 
     injection = format_injection(final_results)
 
@@ -3030,9 +3117,11 @@ def cmd_consolidate(args):
 
         # v1.5.0: Soul Health Report
         try:
-            from soul_health import compute_soul_score, print_soul_report
+            from soul_health import compute_soul_score, print_soul_report, save_soul_history, print_soul_trend
             soul_report = compute_soul_score(memory_dir)
+            save_soul_history(soul_report, memory_dir)
             print_soul_report(soul_report)
+            print_soul_trend(memory_dir)
         except Exception as e:
             print(f"\n⚠️  Soul Health 计算失败: {e}")
 
