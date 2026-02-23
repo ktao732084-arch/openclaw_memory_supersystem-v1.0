@@ -7,7 +7,94 @@
 
 ---
 
-## [v1.5.2] - 2026-02-21
+## [v1.5.3] - 2026-02-23
+
+### 🐛 Fix - LLM 兜底机制修复
+
+#### 问题根因
+- `high_confidence_threshold=0.5` 与规则默认分 `0.5` 完全重合，导致 55% 的内容永远绕过 LLM
+
+#### 修复内容
+- `high_confidence_threshold` 0.5 → 0.7，只有规则明确识别的高价值内容才跳过 LLM
+- `uncertain_range` 扩展到 `(0.15, 0.7)`，覆盖所有规则默认分 0.5 的内容
+- `is_complex` 判断阈值 0.4 → 0.3，更多内容触发复杂度检测
+- `call_llm` 兼容 GLM 思考模型：`content` 为空时读 `reasoning_content`
+- `max_tokens` 100 → 500，避免思考模型 token 耗尽导致空响应
+- system_prompt 优化：明确身份信息（学校/专业/职业）归 `identity_health_safety` 高分
+
+#### 测试结果
+- 身份信息 importance 从 0.35 → 0.85 ✅
+- 过敏信息规则直接 1.0，不浪费 LLM token ✅
+- 废话噪声在进 LLM 前被拦截 ✅
+
+---
+
+## [v1.5.2] - 2026-02-23
+
+### ✨ Features - TF-IDF 向量检索 + RRF 混合检索
+
+#### 新增 `scripts/tfidf_engine.py`
+- char-level TF-IDF（ngram 2-4），完全离线零 API 消耗，天然支持中文
+- 增量索引：checksum 判断是否需要重建，避免每次重算
+- 词汇表 20000，覆盖 308 条记忆记录
+
+#### RRF 混合检索
+- `rrf_merge()`：Reciprocal Rank Fusion 合并 keyword/entity/tfidf/qmd 四路结果
+- 公式：`score = Σ 1/(k+rank)`，k=60（论文推荐值）
+- 检索结果从 8 条扩展到 16 条
+
+#### 降级保护
+- `TFIDF_ENABLED=False` 时自动回退原有逻辑，不影响稳定性
+
+---
+
+## [v1.5.1] - 2026-02-23
+
+### ✨ Features - Spreading Activation + Soul History 趋势
+
+#### Spreading Activation（ACT-R 启发）
+- 检索结果中的实体通过共现关系激活关联记忆
+- top-3 spread 记录追加到 final 结果末尾，不参与主排名竞争
+- `spread_factor=0.3`，激活分数 = 原始分 × 0.3
+
+#### Soul History 趋势
+- 每次 consolidate 自动保存 Soul Score 到 `memory/state/soul_history.jsonl`
+- `print_soul_trend()` 输出近 7 次历史趋势
+
+#### Bug Fixes
+- `keyword_search` / `entity_search` 补全 `entities`/`last_accessed`/`is_identity` 字段
+- 修复 `format_injection` KeyError: type 字段缺失
+
+---
+
+## [v1.5.0] - 2026-02-23
+
+### ✨ Features - 三维检索评分 + 自动 Reflection + Identity 保护
+
+基于文献调研（Stanford GA / BMAM / ACT-R / RoboMemory）实现：
+
+#### 三维检索评分（Stanford GA）
+- `rerank_results()` 重写：`0.35·recency + 0.35·importance + 0.30·relevance`
+- recency 指数衰减，λ=0.1，半衰期 ~7 天
+- identity facts 半衰期延长到 14 天
+
+#### 自动 Reflection（Stanford GA）
+- `generate_summaries()` 新增触发条件：facts ≥ 8 且距上次摘要 > 7 天自动重生成
+- 生成摘要带 `is_reflection=True` 标记
+
+#### Identity 保护（BMAM）
+- `template_extract()` 自动打 `is_identity` 标签（`category == identity_health_safety`）
+- `phase6_decay_with_access_protection()` identity facts 衰减率减半
+- 批量回填历史 facts 的 `is_identity` 标签（8/233 条）
+
+#### Soul Health 监控（BMAM Soul Erosion）
+- 新增 `scripts/soul_health.py`
+- `S = 0.25·T + 0.35·C + 0.40·I`（时序一致性 + 语义一致性 + 身份保持）
+- 每次 consolidate 自动输出健康报告，当前 0.978 🟢
+
+---
+
+
 
 ### 🔧 Hotfix - 暂时禁用 OpenClaw 集成
 
