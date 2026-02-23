@@ -12,7 +12,7 @@
 
 ### 1. 创建飞书自建应用
 - **App ID**: `cli_a90737e0f5b81cd3`
-- **App Secret**: `REDACTED`
+- **App Secret**: `YOUR_APP_SECRET_HERE`
 - **权限配置**: `bitable:app`, `bitable:record`
 
 ### 2. 获取多维表格信息

@@ -132,7 +132,7 @@ IF(客资数量 > 0, (转化数 / 客资数量) * 100, 0)
 import requests
 
 FEISHU_APP_ID = "cli_a90737e0f5b81cd3"
-FEISHU_APP_SECRET = "REDACTED"
+FEISHU_APP_SECRET = "YOUR_APP_SECRET_HERE"
 FEISHU_APP_TOKEN = "FEiCbGEDHarzyUsPG8QcoLxwn7d"
 FEISHU_TABLE_ID = "tbl1n1PC1aooYdKk"
 

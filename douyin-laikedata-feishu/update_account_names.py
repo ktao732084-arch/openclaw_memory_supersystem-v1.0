@@ -11,7 +11,7 @@ import requests
 EXCEL_PATH = '/root/单元投放_账户列表_64763_2026_02_13 00_57_23.xlsx'
 
 FEISHU_APP_ID = 'cli_a90737e0f5b81cd3'
-FEISHU_APP_SECRET = 'REDACTED'
+FEISHU_APP_SECRET = os.getenv('FEISHU_APP_SECRET')
 FEISHU_APP_TOKEN = 'FEiCbGEDHarzyUsPG8QcoLxwn7d'
 TABLE_TOUFA = 'tbl1n1PC1aooYdKk'
 

@@ -3,7 +3,7 @@ import requests
 import json
 
 FEISHU_APP_ID = "cli_a90737e0f5b81cd3"
-FEISHU_APP_SECRET = "REDACTED"
+FEISHU_APP_SECRET = os.getenv('FEISHU_APP_SECRET')
 FEISHU_APP_TOKEN = "FEiCbGEDHarzyUsPG8QcoLxwn7d"
 FEISHU_TABLE_ID = "tbl1n1PC1aooYdKk"
 

@@ -8,7 +8,7 @@ import requests
 
 # 飞书配置
 FEISHU_APP_ID = "cli_a90737e0f5b81cd3"
-FEISHU_APP_SECRET = "REDACTED"
+FEISHU_APP_SECRET = os.getenv('FEISHU_APP_SECRET')
 FEISHU_APP_TOKEN = "FEiCbGEDHarzyUsPG8QcoLxwn7d"
 TABLE_ID_DATA = "tbl1n1PC1aooYdKk"  # 投放数据表
 TABLE_ID_SHEET2 = "tbl3Oyi6JYt3ZUIP"  # Sheet2

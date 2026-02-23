@@ -7,7 +7,7 @@ from collections import Counter
 
 # 飞书配置
 FEISHU_APP_ID = 'cli_a90737e0f5b81cd3'
-FEISHU_APP_SECRET = 'REDACTED'
+FEISHU_APP_SECRET = os.getenv('FEISHU_APP_SECRET')
 FEISHU_APP_TOKEN = 'FEiCbGEDHarzyUsPG8QcoLxwn7d'
 TABLE_KEZI = 'tbl3Oyi6JYt3ZUIP'  # Sheet2（客资数据）
 
