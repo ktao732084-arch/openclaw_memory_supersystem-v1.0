@@ -6,8 +6,8 @@ import requests
 import json
 
 JULIANG_APP_ID = 1856818099350592
-JULIANG_SECRET = "REDACTED"
-AUTH_CODE = "REDACTED"
+JULIANG_SECRET = os.getenv('JULIANG_APP_SECRET')
+AUTH_CODE = os.getenv('JULIANG_AUTH_CODE')
 
 def get_access_token():
     """使用 auth_code 换取 access_token"""

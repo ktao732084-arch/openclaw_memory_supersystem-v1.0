@@ -7,7 +7,7 @@ import json
 from datetime import datetime, timedelta
 from collections import defaultdict
 
-ACCESS_TOKEN = "REDACTED"
+ACCESS_TOKEN = os.getenv('JULIANG_ACCESS_TOKEN')
 LOCAL_ACCOUNT_ID = 1835880409219083
 
 def get_all_promotion_data(date_str):

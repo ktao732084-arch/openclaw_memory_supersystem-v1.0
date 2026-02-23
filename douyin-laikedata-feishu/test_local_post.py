@@ -6,7 +6,7 @@ import requests
 import json
 from datetime import datetime, timedelta
 
-ACCESS_TOKEN = "REDACTED"
+ACCESS_TOKEN = os.getenv('JULIANG_ACCESS_TOKEN')
 LOCAL_ACCOUNT_ID = 1835880409219083
 
 def test_local_report_post():

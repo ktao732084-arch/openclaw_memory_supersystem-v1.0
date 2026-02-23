@@ -6,8 +6,8 @@ import json
 from datetime import datetime, timedelta
 
 # 当前的 token 信息
-CURRENT_ACCESS_TOKEN = "REDACTED"
-CURRENT_REFRESH_TOKEN = "REDACTED"
+CURRENT_ACCESS_TOKEN = os.getenv('JULIANG_ACCESS_TOKEN')
+CURRENT_REFRESH_TOKEN = os.getenv('JULIANG_REFRESH_TOKEN')
 
 # Token 是在 2026-02-12 20:00 左右获取的，有效期24小时
 TOKEN_OBTAINED_AT = datetime(2026, 2, 12, 20, 0, 0)

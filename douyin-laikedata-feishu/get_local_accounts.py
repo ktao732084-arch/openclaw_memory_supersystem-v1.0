@@ -5,7 +5,7 @@
 import requests
 import json
 
-ACCESS_TOKEN = "REDACTED"
+ACCESS_TOKEN = os.getenv('JULIANG_ACCESS_TOKEN')
 ADVERTISER_ID = 1769665409798152
 
 def get_local_accounts():

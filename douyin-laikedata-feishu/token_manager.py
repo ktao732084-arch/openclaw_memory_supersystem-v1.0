@@ -13,7 +13,7 @@ TOKEN_FILE = "/root/.openclaw/workspace/douyin-laikedata-feishu/.token_cache.jso
 
 # 巨量引擎配置
 APP_ID = 1856818099350592
-APP_SECRET = "REDACTED"
+APP_SECRET = os.getenv('JULIANG_APP_SECRET')
 
 # 导入通知器（可选）
 try:

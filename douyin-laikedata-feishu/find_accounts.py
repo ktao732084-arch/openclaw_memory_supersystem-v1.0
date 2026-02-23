@@ -6,7 +6,7 @@ import requests
 import json
 from datetime import datetime, timedelta
 
-ACCESS_TOKEN = "REDACTED"
+ACCESS_TOKEN = os.getenv('JULIANG_ACCESS_TOKEN')
 ADVERTISER_ID = 1769665409798152
 LOCAL_ACCOUNT_ID = 1835880409219083  # 已知的一个账户
 

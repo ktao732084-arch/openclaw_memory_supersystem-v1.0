@@ -9,7 +9,7 @@ from urllib.parse import urlencode
 import time
 
 # 巨量引擎配置
-JULIANG_ACCESS_TOKEN = "REDACTED"
+JULIANG_ACCESS_TOKEN = os.getenv('JULIANG_ACCESS_TOKEN')
 LOCAL_ACCOUNT_ID = 1835880409219083
 
 # 飞书配置

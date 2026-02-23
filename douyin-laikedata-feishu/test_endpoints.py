@@ -6,7 +6,7 @@ import requests
 import json
 from datetime import datetime, timedelta
 
-ACCESS_TOKEN = "REDACTED"
+ACCESS_TOKEN = os.getenv('JULIANG_ACCESS_TOKEN')
 ADVERTISER_ID = 1769665409798152
 
 def test_api(name, url, method="GET", payload=None):

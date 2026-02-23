@@ -7,7 +7,7 @@ import json
 from datetime import datetime, timedelta
 from urllib.parse import urlencode
 
-ACCESS_TOKEN = "REDACTED"
+ACCESS_TOKEN = os.getenv('JULIANG_ACCESS_TOKEN')
 NEW_ACCOUNT_ID = 272328498099752
 
 def test_account_data(account_id):

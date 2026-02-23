@@ -6,7 +6,7 @@ import requests
 import json
 from collections import defaultdict
 
-ACCESS_TOKEN = "REDACTED"
+ACCESS_TOKEN = os.getenv('JULIANG_ACCESS_TOKEN')
 KNOWN_ACCOUNT_ID = 1835880409219083
 
 print("="*60)
