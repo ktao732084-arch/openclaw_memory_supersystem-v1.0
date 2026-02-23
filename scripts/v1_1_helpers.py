@@ -364,6 +364,10 @@ def phase6_decay_with_access_protection(memories, config):
         importance = mem.get("importance", 0.5)
         actual_decay = base_decay * (1 - importance * 0.5) * decay_factor
 
+        # v1.5.0: identity facts 衰减豁免（BMAM Identity Preservation）
+        if mem.get("is_identity"):
+            actual_decay *= 0.5  # 衰减减半
+
         # 更新 score
         current_score = mem.get("final_score", mem.get("score", importance))
         mem["score"] = current_score * (1 - actual_decay)

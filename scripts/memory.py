@@ -934,6 +934,7 @@ def template_extract(filtered_segments, use_llm_fallback=True, memory_dir=None):
         # 1. v1.1.5: 三层实体识别(传入 memory_dir)
         entities = extract_entities(content, memory_dir=memory_dir, use_llm_fallback=llm_enabled and phase3_llm)
         mem_type = classify_memory_type(content, importance)
+        _, content_category = calculate_importance(content)
 
         # 2. 构建记录
         record = {
@@ -957,6 +958,8 @@ def template_extract(filtered_segments, use_llm_fallback=True, memory_dir=None):
             "tier3_tracked": False,
             "reactivation_count": 0,
             "final_score": importance,
+            # v1.5.0: identity 保护标签（BMAM Identity Preservation）
+            "is_identity": content_category == "identity_health_safety",
         }
 
         # v1.1.4: 时间敏感检测
@@ -1249,12 +1252,16 @@ def code_verify_belief(belief, facts):
 
 def generate_summaries(facts, existing_summaries, trigger_count=3):
     """
-    Phase-4C: Summaries 生成
-    当同一实体有 >= trigger_count 个 facts 时,生成摘要
+    Phase-4C: Summaries 生成 + 自动 Reflection（v1.5.0）
 
-    返回: 新生成的 summaries 列表
+    触发条件（Stanford GA Reflection 机制）：
+    1. 实体 facts >= trigger_count 且从未生成摘要 → 首次生成
+    2. 实体 facts >= 8 且距上次摘要 > 7 天 → 自动 Reflection（重新生成）
+
+    返回: 新生成的 summaries 列表（不含已有摘要）
     """
     new_summaries = []
+    now = datetime.utcnow()
 
     # 按实体分组 facts
     facts_by_entity = {}
@@ -1264,34 +1271,60 @@ def generate_summaries(facts, existing_summaries, trigger_count=3):
                 facts_by_entity[entity] = []
             facts_by_entity[entity].append(fact)
 
-    # 检查已有摘要覆盖的实体
-    summarized_entities = set()
+    # 检查已有摘要：记录每个实体最近一次摘要时间
+    entity_last_summary = {}
     for summary in existing_summaries:
-        summarized_entities.update(summary.get("entities", []))
+        for entity in summary.get("entities", []):
+            created = summary.get("created", "")
+            if entity not in entity_last_summary or created > entity_last_summary[entity]:
+                entity_last_summary[entity] = created
 
-    # 为符合条件的实体生成摘要
     for entity, entity_facts in facts_by_entity.items():
-        if len(entity_facts) >= trigger_count and entity not in summarized_entities:
-            # 按重要性排序,取 top facts
-            sorted_facts = sorted(entity_facts, key=lambda x: x.get("importance", 0), reverse=True)
-            top_facts = sorted_facts[:5]
+        last_summary_str = entity_last_summary.get(entity)
+        should_generate = False
 
-            # 生成摘要内容(简单拼接)
-            summary_content = f"关于{entity}的信息: " + "; ".join([f["content"][:30] for f in top_facts])
+        if not last_summary_str and len(entity_facts) >= trigger_count:
+            # 首次生成
+            should_generate = True
+        elif last_summary_str and len(entity_facts) >= 8:
+            # Reflection：facts 足够多且距上次摘要超过 7 天
+            try:
+                last_dt = datetime.fromisoformat(last_summary_str.replace("Z", "+00:00")).replace(tzinfo=None)
+                days_since = (now - last_dt).days
+                if days_since >= 7:
+                    should_generate = True
+            except Exception:
+                pass
 
-            # 计算摘要重要性(取平均)
-            avg_importance = sum(f.get("importance", 0.5) for f in top_facts) / len(top_facts)
+        if not should_generate:
+            continue
 
-            summary = {
-                "id": generate_id("s", summary_content),
-                "content": summary_content,
-                "importance": avg_importance,
-                "score": avg_importance,
-                "entities": [entity],
-                "source_facts": [f["id"] for f in top_facts],
-                "created": now_iso(),
-            }
-            new_summaries.append(summary)
+        # 按重要性排序，取 top-5
+        sorted_facts = sorted(entity_facts, key=lambda x: x.get("importance", 0), reverse=True)
+        top_facts = sorted_facts[:5]
+
+        # identity facts 优先纳入
+        identity_facts = [f for f in entity_facts if f.get("is_identity")]
+        if identity_facts:
+            top_facts = identity_facts[:3] + [f for f in top_facts if f not in identity_facts][:2]
+
+        reflection_tag = "（自动Reflection）" if last_summary_str else ""
+        summary_content = f"关于{entity}的综合认知{reflection_tag}（基于{len(entity_facts)}条记录）: " + \
+                          "; ".join([f["content"][:40] for f in top_facts])
+
+        avg_importance = sum(f.get("importance", 0.5) for f in top_facts) / len(top_facts)
+
+        summary = {
+            "id": generate_id("s", summary_content),
+            "content": summary_content,
+            "importance": avg_importance,
+            "score": avg_importance,
+            "entities": [entity],
+            "source_facts": [f["id"] for f in top_facts],
+            "created": now_iso(),
+            "is_reflection": bool(last_summary_str),
+        }
+        new_summaries.append(summary)
 
     return new_summaries
 
@@ -1617,12 +1650,31 @@ def rerank_results(results, query, limit, memory_dir=None):
     重排序检索结果
 
     v1.1.5 改进:集成实体隔离(竞争性抑制)
+    v1.5.0 改进:三维检索评分 recency × importance × relevance（Stanford GA）
+               identity facts 衰减减半（BMAM Identity Preservation）
 
-    综合考虑: 匹配分数 + 记忆重要性 + 记忆score + 实体隔离
+    综合考虑: recency + 记忆重要性 + 匹配分数 + 实体隔离
     """
-    # 1. 计算基础综合分数
+    import math
+
+    now = datetime.utcnow()
+
+    # 1. 计算三维综合分数（v1.5.0）
     for r in results:
-        r["final_score"] = r.get("score", 0) * 0.4 + r.get("importance", 0.5) * 0.3 + r.get("memory_score", 0.5) * 0.3
+        # Recency: 指数衰减，半衰期 7 天；identity facts 半衰期 14 天
+        last_accessed = r.get("last_accessed") or r.get("created", "")
+        try:
+            dt = datetime.fromisoformat(last_accessed.replace("Z", "+00:00")).replace(tzinfo=None)
+            days_ago = max(0, (now - dt).days)
+        except Exception:
+            days_ago = 30
+        decay_lambda = 0.05 if r.get("is_identity") else 0.1  # identity 衰减更慢
+        recency = math.exp(-decay_lambda * days_ago)
+
+        importance = r.get("importance", 0.5)
+        relevance = r.get("score", 0) * 0.5 + r.get("memory_score", 0.5) * 0.5
+
+        r["final_score"] = 0.35 * recency + 0.35 * importance + 0.30 * relevance
 
     # 2. v1.1.5: 实体隔离(竞争性抑制)
     if V1_1_5_ENABLED and results:
@@ -2975,6 +3027,14 @@ def cmd_consolidate(args):
 
         print("\n" + "=" * 40)
         print("✅ Consolidation 完成!")
+
+        # v1.5.0: Soul Health Report
+        try:
+            from soul_health import compute_soul_score, print_soul_report
+            soul_report = compute_soul_score(memory_dir)
+            print_soul_report(soul_report)
+        except Exception as e:
+            print(f"\n⚠️  Soul Health 计算失败: {e}")
 
         # v1.1.7: 显示智能 LLM 集成统计
         if V1_1_7_ENABLED:
