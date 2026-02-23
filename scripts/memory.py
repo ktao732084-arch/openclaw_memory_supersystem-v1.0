@@ -2559,25 +2559,38 @@ def cmd_consolidate(args):
             print(f"   归档 {expired_count} 条过期记忆")
             print("   ✅ 完成")
 
-        # Phase 1: 轻量全量(模拟 - 需要接入 OpenClaw session)
+        # Phase 1: 轻量全量(切分片段)
         if not args.phase or args.phase == 1:
             print("\n📋 Phase 1: 轻量全量(切分片段)")
-            # TODO: 接入 OpenClaw session 数据
-            # 目前使用模拟数据或从 stdin 读取
+            segments = []
             if args.input:
                 with open(args.input, encoding="utf-8") as f:
                     raw_text = f.read()
-                # 简单按句子切分
-                segments = []
                 for line in raw_text.split("\n"):
                     line = line.strip()
                     if line and len(line) > 5:
                         segments.append({"content": line, "source": args.input})
-                phase_data["segments"] = segments
                 print(f"   从文件读取 {len(segments)} 个片段")
             else:
-                print("   [跳过] 无输入数据,使用 --input 指定输入文件")
-                phase_data["segments"] = []
+                # 自动读取 pending.jsonl
+                pending = load_pending(memory_dir)
+                if pending:
+                    for item in pending:
+                        content = item.get("content", "").strip()
+                        if content and len(content) > 5:
+                            segments.append({
+                                "content": content,
+                                "source": item.get("source", "user"),
+                                "created": item.get("created", ""),
+                                "session": item.get("session", ""),
+                            })
+                    print(f"   从 pending.jsonl 读取 {len(segments)} 个片段")
+                    # 清空 pending（已处理）
+                    save_pending(memory_dir, [])
+                    print("   pending.jsonl 已清空")
+                else:
+                    print("   [跳过] pending.jsonl 为空")
+            phase_data["segments"] = segments
             print("   ✅ 完成")
 
         # Phase 2: 重要性筛选
