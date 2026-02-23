@@ -79,6 +79,37 @@ except ImportError:
     PROACTIVE_ENABLED = False
     # 静默失败，功能会优雅降级
 
+# 导入 v1.3.0 幻觉防御模块
+try:
+    from noise_filter import NoiseFilter
+    from memory_operator import MemoryOperator
+    from conflict_resolver import ConflictResolver
+
+    _noise_filter_instance = NoiseFilter()
+    HALLUCINATION_DEFENSE_ENABLED = True
+except ImportError:
+    HALLUCINATION_DEFENSE_ENABLED = False
+    _noise_filter_instance = None
+
+# 导入扩展后端模块（阈值控制，>5000 条自动启用）
+try:
+    from scaled_backend import ScaledBackend
+    from async_indexer import AsyncIndexer
+    SCALED_BACKEND_AVAILABLE = True
+except ImportError:
+    SCALED_BACKEND_AVAILABLE = False
+
+# 导入多级缓存模块
+try:
+    from cache_manager import CacheManager
+    _cache_manager_instance = CacheManager()
+    CACHE_MANAGER_ENABLED = True
+except ImportError:
+    CACHE_MANAGER_ENABLED = False
+    _cache_manager_instance = None
+
+SCALED_BACKEND_THRESHOLD = 5000
+
 # ============================================================
 # LLM 调用模块（v1.1.3 新增）
 # ============================================================
@@ -253,10 +284,20 @@ NOISE_PATTERNS = {
 def is_noise(content: str) -> tuple[bool, str]:
     """
     前置废话检测，返回 (是否废话, 匹配的类别)
-    在 calculate_importance 之前调用，直接跳过明显废话
+    v1.3.0: 优先使用 NoiseFilter，降级回原有规则
     """
     content = content.strip()
 
+    # v1.3.0: 优先用 NoiseFilter（更强的 4 层过滤）
+    if HALLUCINATION_DEFENSE_ENABLED and _noise_filter_instance:
+        try:
+            result = _noise_filter_instance.is_noise({"content": content})
+            if result:
+                return True, "noise_filter"
+        except Exception:
+            pass  # 降级到原有规则
+
+    # 原有规则兜底
     for category, patterns in NOISE_PATTERNS.items():
         for pattern in patterns:
             if re.match(pattern, content):
@@ -999,19 +1040,70 @@ def tokenize_chinese(text):
 
 def deduplicate_facts(new_facts, existing_facts):
     """
-    Phase 4a: Facts 去重合并 + 冲突检测（v1.1.6 改进）
-
-    v1.1.6 改进：
-    - 使用相对比例（30%）替代绝对数量（3）判断相似度
-    - 分层冲突信号：Tier 1 强降权，Tier 2 弱降权
+    Phase 4a: Facts 去重合并 + 冲突检测
+    v1.3.0: 优先使用 MemoryOperator + ConflictResolver，降级回原有规则
 
     返回: (merged_facts, duplicate_count, downgraded_count)
     """
+    # v1.3.0: 优先用 MemoryOperator
+    if HALLUCINATION_DEFENSE_ENABLED:
+        try:
+            return _deduplicate_with_operator(new_facts, existing_facts)
+        except Exception:
+            pass  # 降级到原有逻辑
+
+    return _deduplicate_legacy(new_facts, existing_facts)
+
+
+def _deduplicate_with_operator(new_facts, existing_facts):
+    """v1.3.0: 使用 MemoryOperator + ConflictResolver 去重"""
+    operator = MemoryOperator()
+    resolver = ConflictResolver()
+
     merged = []
     duplicate_count = 0
     downgraded_count = 0
 
-    # 建立现有 facts 的索引（按实体分组）
+    for new_fact in new_facts:
+        operation, target = operator.decide_operation(new_fact, existing_facts)
+
+        if operation == "NOOP":
+            duplicate_count += 1
+
+        elif operation == "ADD":
+            merged.append(new_fact)
+
+        elif operation == "UPDATE" and target:
+            resolution = resolver.resolve(new_fact, target)
+            if resolution["action"] == "UPDATE":
+                # 用新记忆内容更新旧记忆
+                target["content"] = new_fact["content"]
+                target["importance"] = new_fact.get("importance", target["importance"])
+                target["score"] = max(target.get("score", 0), new_fact.get("score", 0))
+                target["updated"] = now_iso()
+                target["supersedes"] = json.dumps([target.get("id")])
+                downgraded_count += 1
+            else:
+                # KEEP 旧记忆，丢弃新记忆
+                duplicate_count += 1
+
+        elif operation == "DELETE" and target:
+            target["score"] = target.get("score", 0.5) * 0.1
+            target["conflict_downgraded"] = True
+            target["downgrade_reason"] = new_fact["id"]
+            target["downgrade_at"] = now_iso()
+            merged.append(new_fact)
+            downgraded_count += 1
+
+    return merged, duplicate_count, downgraded_count
+
+
+def _deduplicate_legacy(new_facts, existing_facts):
+    """原有去重逻辑（v1.1.6），作为降级兜底"""
+    merged = []
+    duplicate_count = 0
+    downgraded_count = 0
+
     existing_by_entity = {}
     for fact in existing_facts:
         for entity in fact.get("entities", []):
@@ -1024,27 +1116,20 @@ def deduplicate_facts(new_facts, existing_facts):
         new_content = new_fact["content"].lower()
         new_entities = new_fact.get("entities", [])
 
-        # v1.1.6: 分层检测覆盖信号
         has_tier1_override = any(signal in new_fact["content"] for signal in OVERRIDE_SIGNALS_TIER1)
         has_tier2_override = any(signal in new_fact["content"] for signal in OVERRIDE_SIGNALS_TIER2)
         has_override = has_tier1_override or has_tier2_override
 
-        # 检查是否与现有 fact 重复或冲突
         for entity in new_entities:
             if entity in existing_by_entity:
                 for existing in existing_by_entity[entity]:
                     existing_content = existing["content"].lower()
-
-                    # 计算内容重叠度（v1.1.6: 使用中文分词）
                     new_tokens = tokenize_chinese(new_content)
                     existing_tokens = tokenize_chinese(existing_content)
                     overlap = len(new_tokens & existing_tokens)
-
-                    # v1.1.6: 使用相对比例替代绝对数量
                     min_len = min(len(new_tokens), len(existing_tokens))
                     overlap_ratio = overlap / max(min_len, 1)
 
-                    # v1.1.6: 相似度检查改用比例阈值
                     is_similar = (
                         new_content in existing_content
                         or existing_content in new_content
@@ -1052,27 +1137,20 @@ def deduplicate_facts(new_facts, existing_facts):
                     )
 
                     if is_similar:
-                        # 如果新记忆包含覆盖信号，执行冲突降权
                         if has_override and overlap_ratio >= DEDUP_CONFIG["min_overlap_ratio"]:
-                            # v1.1.6: 分层降权
                             old_score = existing.get("score", existing.get("importance", 0.5))
                             if has_tier1_override:
-                                # Tier 1: 强降权（几乎废弃旧记忆）
                                 penalty = DEDUP_CONFIG["tier1_penalty"]
                                 existing["override_tier"] = 1
                             else:
-                                # Tier 2: 弱降权（标记为可能冲突）
                                 penalty = DEDUP_CONFIG["tier2_penalty"]
                                 existing["override_tier"] = 2
-
                             existing["score"] = old_score * penalty
                             existing["conflict_downgraded"] = True
                             existing["downgrade_reason"] = new_fact["id"]
                             existing["downgrade_at"] = now_iso()
                             downgraded_count += 1
-                            # 不标记为重复，允许新记忆加入
                         else:
-                            # 正常去重：更新现有记录（保留更高 importance）
                             if new_fact["importance"] > existing.get("importance", 0):
                                 existing["content"] = new_fact["content"]
                                 existing["importance"] = new_fact["importance"]
@@ -1313,8 +1391,18 @@ def get_cache_key(query):
 
 
 def get_cached_result(query):
-    """获取缓存结果"""
+    """获取缓存结果（v1.3.0: 优先用 CacheManager L2 缓存）"""
     key = get_cache_key(query)
+
+    if CACHE_MANAGER_ENABLED and _cache_manager_instance:
+        try:
+            result = _cache_manager_instance.get_query_result(key)
+            if result is not None:
+                return result
+        except Exception:
+            pass  # 降级到内存缓存
+
+    # 原有内存缓存兜底
     if key in _session_cache:
         entry = _session_cache[key]
         if datetime.utcnow().timestamp() - entry["time"] < _cache_ttl:
@@ -1325,8 +1413,16 @@ def get_cached_result(query):
 
 
 def set_cached_result(query, result):
-    """设置缓存结果"""
+    """设置缓存结果（v1.3.0: 同时写入 CacheManager L2 缓存）"""
     key = get_cache_key(query)
+
+    if CACHE_MANAGER_ENABLED and _cache_manager_instance:
+        try:
+            _cache_manager_instance.set_query_result(key, result)
+        except Exception:
+            pass  # 降级到内存缓存
+
+    # 原有内存缓存兜底
     _session_cache[key] = {"time": datetime.utcnow().timestamp(), "result": result}
 
 
@@ -1993,8 +2089,31 @@ def _vector_search(query: str, memory_dir: Path, limit: int = 20) -> list:
         return []
 
 
+def _get_active_memory_count(memory_dir):
+    """获取活跃记忆总数"""
+    count = 0
+    for mem_type in ["facts", "beliefs", "summaries"]:
+        path = memory_dir / f"layer2/active/{mem_type}.jsonl"
+        count += sum(1 for _ in load_jsonl(path))
+    return count
+
+
 def _load_all_active_records(memory_dir):
-    """加载所有活跃记录，返回 {id: record} 字典"""
+    """加载所有活跃记录，返回 {id: record} 字典
+    v1.3.0: 超过 SCALED_BACKEND_THRESHOLD 自动切换 ScaledBackend
+    """
+    # 阈值判断：超过 5000 条自动启用 ScaledBackend
+    if SCALED_BACKEND_AVAILABLE:
+        try:
+            count = _get_active_memory_count(memory_dir)
+            if count >= SCALED_BACKEND_THRESHOLD:
+                backend = ScaledBackend(memory_dir)
+                all_mems = backend.get_all_active_memories()
+                return {m["id"]: m for m in all_mems}
+        except Exception:
+            pass  # 降级到原有逻辑
+
+    # 原有 JSONL 逻辑
     records = {}
     for mem_type in ["facts", "beliefs", "summaries"]:
         path = memory_dir / f"layer2/active/{mem_type}.jsonl"
