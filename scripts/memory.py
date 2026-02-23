@@ -76,6 +76,13 @@ try:
 except ImportError:
     VECTOR_SEARCH_ENABLED = False
 
+# 导入 v1.5.2 TF-IDF + RRF 混合检索
+try:
+    from tfidf_engine import tfidf_search, rrf_merge, build_tfidf_index
+    TFIDF_ENABLED = True
+except ImportError:
+    TFIDF_ENABLED = False
+
 # 导入主动记忆引擎模块
 try:
     from proactive_engine import Intent, ProactiveMemoryEngine, Suggestion, create_engine
@@ -2133,6 +2140,14 @@ def router_search(query, memory_dir=None, use_qmd=True, use_vector=True):
         if vector_results:
             vector_used = True
 
+    # v1.5.2: TF-IDF 语义检索
+    tfidf_results = []
+    if TFIDF_ENABLED:
+        try:
+            tfidf_results = tfidf_search(query, memory_dir, top_k=config["initial"])
+        except Exception:
+            pass
+
     qmd_results = []
     qmd_used = False
     if use_qmd and qmd_available(memory_dir):
@@ -2151,28 +2166,29 @@ def router_search(query, memory_dir=None, use_qmd=True, use_vector=True):
     keyword_results = keyword_search(query, memory_dir, limit=config["initial"])
     entity_results = entity_search(query, memory_dir, limit=config["initial"])
 
-    seen_ids = set()
-    merged_results = []
-
-    for r in pending_results:
-        if r["id"] not in seen_ids:
-            seen_ids.add(r["id"])
-            merged_results.append(r)
-
-    for r in vector_results:
-        if r["id"] not in seen_ids:
-            seen_ids.add(r["id"])
-            merged_results.append(r)
-
-    for r in qmd_results:
-        if r["id"] not in seen_ids:
-            seen_ids.add(r["id"])
-            merged_results.append(r)
-
-    for r in keyword_results + entity_results:
-        if r["id"] not in seen_ids:
-            seen_ids.add(r["id"])
-            merged_results.append(r)
+    # v1.5.2: RRF 合并多路结果（pending 直接保留，其余走 RRF）
+    if TFIDF_ENABLED and (tfidf_results or qmd_results or keyword_results or entity_results):
+        rrf_input = [l for l in [tfidf_results, qmd_results, keyword_results, entity_results, vector_results] if l]
+        rrf_merged = rrf_merge(rrf_input, k=60, top_n=config["rerank"])
+        # pending 优先，RRF 结果去重追加
+        seen_ids = {r["id"] for r in pending_results}
+        merged_results = list(pending_results)
+        for r in rrf_merged:
+            if r["id"] not in seen_ids:
+                seen_ids.add(r["id"])
+                merged_results.append(r)
+    else:
+        # 降级：原有简单合并
+        seen_ids = set()
+        merged_results = []
+        for r in pending_results:
+            if r["id"] not in seen_ids:
+                seen_ids.add(r["id"])
+                merged_results.append(r)
+        for r in vector_results + qmd_results + keyword_results + entity_results:
+            if r["id"] not in seen_ids:
+                seen_ids.add(r["id"])
+                merged_results.append(r)
 
     reranked = rerank_results(merged_results, query, config["rerank"], memory_dir=memory_dir)
 
