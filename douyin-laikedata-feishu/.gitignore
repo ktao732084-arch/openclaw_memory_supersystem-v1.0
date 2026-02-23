@@ -2,3 +2,7 @@
 __pycache__/
 *.pyc
 *.log
+.juliang_token
+.token_cache.json
+*.token
+sync_report.txt
