@@ -77,7 +77,8 @@ def extract_user_messages(session_file, hours=24):
                     timestamp_str = entry.get("timestamp")
                     if timestamp_str:
                         timestamp = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
-                        if timestamp.replace(tzinfo=None) < cutoff:
+                        cutoff_aware = cutoff.replace(tzinfo=timestamp.tzinfo)
+                        if timestamp < cutoff_aware:
                             continue
 
                     # 提取内容 (content 是数组格式)
@@ -98,12 +99,27 @@ def extract_user_messages(session_file, hours=24):
                         continue
 
                     # 过滤系统消息和元数据
-                    if "Conversation info (untrusted metadata)" in content:
-                        continue
                     if content.startswith("Read HEARTBEAT.md"):
                         continue
                     if content.startswith("System:"):
                         continue
+
+                    # 剥离 Conversation info metadata 头，提取真正的用户消息
+                    if "Conversation info (untrusted metadata)" in content:
+                        # 格式: "Conversation info...\n```json\n{...}\n```\n\n[时间] 真正内容"
+                        # 找到 ``` 块结束后的内容
+                        parts = content.split("```")
+                        if len(parts) >= 3:
+                            # parts[2] 是 ``` 之后的内容
+                            real_content = parts[-1].strip()
+                            # 去掉时间戳前缀 "[Mon 2026-02-23 01:32 UTC] "
+                            import re
+                            real_content = re.sub(r'^\[.*?UTC\]\s*', '', real_content).strip()
+                            if len(real_content) < 5:
+                                continue
+                            content = real_content
+                        else:
+                            continue
 
                     messages.append(
                         {

@@ -2,20 +2,19 @@
 """
 Memory System v1.4.0 - 三层记忆架构 CLI
 
-⚠️  版本管理规范：
-    - 版本号以 git tag 为准，禁止在文件头自封版本
-    - 发布新版本：git tag vX.Y.Z -m "说明" && git push --tags
+⚠️  版本管理规范:
+    - 版本号以 git tag 为准,禁止在文件头自封版本
+    - 发布新版本:git tag vX.Y.Z -m "说明" && git push --tags
     - 当前 tag: v1.4.0
 
-功能模块（按版本）：
+功能模块(按版本):
   v1.1.7  三层记忆 + LLM 深度集成 + 实体识别
   v1.2.x  QMD 集成 + 白天轻量检查 + SQLite 后端
-  v1.3.0  幻觉防御（NoiseFilter + MemoryOperator + ConflictResolver + CacheManager）
-          ScaledBackend + AsyncIndexer（>5000条自动启用）
-  v1.4.0  时序引擎（TemporalQueryEngine + FactEvolutionTracker + EvidenceTracker）
+  v1.3.0  幻觉防御(NoiseFilter + MemoryOperator + ConflictResolver + CacheManager)
+          ScaledBackend + AsyncIndexer(>5000条自动启用)
+  v1.4.0  时序引擎(TemporalQueryEngine + FactEvolutionTracker + EvidenceTracker)
           ProactiveEngine 接入 consolidation Phase 6.8
-  v1.6.0  向量检索（VectorEmbedding + VectorIndex + HybridSearch）
-"""
+  v1.6.0  向量检索(VectorEmbedding + VectorIndex + HybridSearch)
 """
 
 import argparse
@@ -37,16 +36,16 @@ try:
     V1_1_ENABLED = True
 except ImportError:
     V1_1_ENABLED = False
-    print("⚠️ v1.1 模块未找到，部分功能不可用")
+    print("⚠️ v1.1 模块未找到,部分功能不可用")
 
-# 导入 v1.1.5 实体系统模块（用于实体隔离和学习实体清理）
+# 导入 v1.1.5 实体系统模块(用于实体隔离和学习实体清理)
 try:
     from v1_1_5_entity_system import ENTITY_SYSTEM_CONFIG
 
     V1_1_5_ENABLED = True
 except ImportError:
     V1_1_5_ENABLED = False
-    # 静默失败，不打印警告（功能会优雅降级）
+    # 静默失败,不打印警告(功能会优雅降级)
 
 # 导入 v1.1.7 LLM 深度集成模块
 try:
@@ -65,7 +64,7 @@ try:
     V1_1_7_ENABLED = True
 except ImportError:
     V1_1_7_ENABLED = False
-    # 静默失败，功能会优雅降级
+    # 静默失败,功能会优雅降级
 
 # 导入 v1.6.0 向量检索模块
 try:
@@ -85,7 +84,7 @@ try:
     PROACTIVE_ENABLED = True
 except ImportError:
     PROACTIVE_ENABLED = False
-    # 静默失败，功能会优雅降级
+    # 静默失败,功能会优雅降级
 
 # 导入 v1.3.0 幻觉防御模块
 try:
@@ -113,7 +112,7 @@ try:
 except ImportError:
     TEMPORAL_ENGINE_ENABLED = False
 
-# 导入扩展后端模块（阈值控制，>5000 条自动启用）
+# 导入扩展后端模块(阈值控制,>5000 条自动启用)
 try:
     from scaled_backend import ScaledBackend
     from async_indexer import AsyncIndexer
@@ -133,7 +132,7 @@ except ImportError:
 SCALED_BACKEND_THRESHOLD = 5000
 
 # ============================================================
-# LLM 调用模块（v1.1.3 新增）
+# LLM 调用模块(v1.1.3 新增)
 # ============================================================
 
 
@@ -149,7 +148,7 @@ def get_llm_config():
 
 def call_llm(prompt, system_prompt=None, max_tokens=500):
     """
-    调用 LLM（使用用户的 API Key）
+    调用 LLM(使用用户的 API Key)
 
     返回: (success: bool, result: str, error: str)
     """
@@ -273,30 +272,30 @@ DEFAULT_CONFIG = {
 }
 
 # ============================================================
-# v1.2.0 废话前置过滤器（规则强化）
+# v1.2.0 废话前置过滤器(规则强化)
 # ============================================================
 
 NOISE_PATTERNS = {
-    # 纯语气词/感叹词（直接跳过，不进入 LLM）
+    # 纯语气词/感叹词(直接跳过,不进入 LLM)
     "pure_interjection": [
-        r"^[哈嘿呵嗯啊哦噢呃唉嘛吧啦呀咯嘞哇喔]+[~～。！!？?]*$",  # 哈哈哈、嗯嗯、啊啊啊
-        r"^[oO]+[kK]+[~～。！!？?]*$",  # ok, OK, okok
-        r"^[yY]e+[sS]*[~～。！!？?]*$",  # yes, yeees
-        r"^[nN]o+[~～。！!？?]*$",  # no, nooo
-        r"^[lL][oO]+[lL]+[~～。！!？?]*$",  # lol, looool
+        r"^[哈嘿呵嗯啊哦噢呃唉嘛吧啦呀咯嘞哇喔]+[~～.!!??]*$",  # 哈哈哈/嗯嗯/啊啊啊
+        r"^[oO]+[kK]+[~～.!!??]*$",  # ok, OK, okok
+        r"^[yY]e+[sS]*[~～.!!??]*$",  # yes, yeees
+        r"^[nN]o+[~～.!!??]*$",  # no, nooo
+        r"^[lL][oO]+[lL]+[~～.!!??]*$",  # lol, looool
     ],
-    # 简单确认/应答（直接跳过）
+    # 简单确认/应答(直接跳过)
     "simple_ack": [
-        r"^(好的?|行|可以|没问题|收到|了解|明白|懂了?|知道了?|OK|ok|嗯|对|是的?)[~～。！!？?]*$",
-        r"^(谢谢|感谢|thanks?|thx)[~～。！!？?]*$",
-        r"^(不用|不必|算了|没事|无所谓)[~～。！!？?]*$",
+        r"^(好的?|行|可以|没问题|收到|了解|明白|懂了?|知道了?|OK|ok|嗯|对|是的?)[~～.!!??]*$",
+        r"^(谢谢|感谢|thanks?|thx)[~～.!!??]*$",
+        r"^(不用|不必|算了|没事|无所谓)[~～.!!??]*$",
     ],
     # 纯表情/符号
     "emoji_only": [
-        r"^[\U0001F300-\U0001F9FF\U0001FA00-\U0001FAFF\u2600-\u26FF\u2700-\u27BF\s~～。！!？?]+$",  # emoji
-        r"^[.。,，!！?？~～\s]+$",  # 纯标点
+        r"^[\U0001F300-\U0001F9FF\U0001FA00-\U0001FAFF\u2600-\u26FF\u2700-\u27BF\s~～.!!??]+$",  # emoji
+        r"^[..,,!!??~～\s]+$",  # 纯标点
     ],
-    # 过短内容（<3字符，排除数字和特殊标记）
+    # 过短内容(<3字符,排除数字和特殊标记)
     "too_short": [
         r"^.{0,2}$",  # 0-2个字符
     ],
@@ -305,12 +304,12 @@ NOISE_PATTERNS = {
 
 def is_noise(content: str) -> tuple[bool, str]:
     """
-    前置废话检测，返回 (是否废话, 匹配的类别)
-    v1.3.0: 优先使用 NoiseFilter，降级回原有规则
+    前置废话检测,返回 (是否废话, 匹配的类别)
+    v1.3.0: 优先使用 NoiseFilter,降级回原有规则
     """
     content = content.strip()
 
-    # v1.3.0: 优先用 NoiseFilter（更强的 4 层过滤）
+    # v1.3.0: 优先用 NoiseFilter(更强的 4 层过滤)
     if HALLUCINATION_DEFENSE_ENABLED and _noise_filter_instance:
         try:
             result = _noise_filter_instance.is_noise({"content": content})
@@ -410,19 +409,19 @@ EXPLICIT_SIGNALS = {
     "reduce": {"keywords": ["顺便说一下", "随便问问", "不重要", "无所谓"], "boost": -0.2},
 }
 
-# 实体识别模式（v1.1.2 改进：支持正则模式）
+# 实体识别模式(v1.1.2 改进:支持正则模式)
 ENTITY_PATTERNS = {
     "person": {
         "fixed": ["我", "你", "他", "她", "用户", "Ktao", "Tkao"],
         "patterns": [
-            r"[A-Z][a-z]+",  # 英文人名：John, Mary（移除\b）
+            r"[A-Z][a-z]+",  # 英文人名:John, Mary(移除\b)
         ],
     },
     "project": {
         "fixed": ["项目", "系统", "工具", "应用", "App"],
         "patterns": [
             r"项目_\d+",  # 项目_1, 项目_25
-            r"[A-Z][a-zA-Z0-9-]+",  # OpenClaw, Memory-System（移除\b）
+            r"[A-Z][a-zA-Z0-9-]+",  # OpenClaw, Memory-System(移除\b)
         ],
     },
     "location": {
@@ -441,10 +440,10 @@ ENTITY_PATTERNS = {
     },
 }
 
-# v1.1.6 新增：引号实体模式（优先级高于通用词）
-# 支持中英文引号：「」『』""''《》
+# v1.1.6 新增:引号实体模式(优先级高于通用词)
+# 支持中英文引号:""『』""''《》
 QUOTED_ENTITY_PATTERNS = [
-    # 中文单引号「」
+    # 中文单引号""
     "\u300c([^\u300d]+)\u300d",
     # 中文双引号『』
     "\u300e([^\u300f]+)\u300f",
@@ -460,7 +459,7 @@ QUOTED_ENTITY_PATTERNS = [
     r'"([^"]+)"',
 ]
 
-# 冲突覆盖信号（v1.1.1 新增，v1.1.6 扩展）
+# 冲突覆盖信号(v1.1.1 新增,v1.1.6 扩展)
 # Tier 1: 高置信度修正信号 → 直接触发冲突覆盖
 OVERRIDE_SIGNALS_TIER1 = [
     "不再",
@@ -482,16 +481,16 @@ OVERRIDE_SIGNALS_TIER1 = [
     "准确说",
 ]
 
-# Tier 2: 中置信度修正信号 → 标记为"可能冲突"，降权但不自动覆盖
+# Tier 2: 中置信度修正信号 → 标记为"可能冲突",降权但不自动覆盖
 OVERRIDE_SIGNALS_TIER2 = ["逗你的", "开玩笑", "骗你的", "瞎说的", "胡说", "刚才说错了", "说反了", "搞错了", "弄错了"]
 
-# 合并（向后兼容）
+# 合并(向后兼容)
 OVERRIDE_SIGNALS = OVERRIDE_SIGNALS_TIER1 + OVERRIDE_SIGNALS_TIER2
 
 # 冲突降权系数
 CONFLICT_PENALTY = 0.2
 
-# LLM 调用统计（v1.1.3 新增）
+# LLM 调用统计(v1.1.3 新增)
 LLM_STATS = {"phase2_calls": 0, "phase3_calls": 0, "total_tokens": 0, "errors": 0}
 
 # ============================================================
@@ -502,8 +501,8 @@ LLM_STATS = {"phase2_calls": 0, "phase3_calls": 0, "total_tokens": 0, "errors": 
 def get_memory_dir():
     """获取记忆系统根目录
 
-    优先级：
-    1. MEMORY_DIR 环境变量（直接指定记忆目录路径）
+    优先级:
+    1. MEMORY_DIR 环境变量(直接指定记忆目录路径)
     2. WORKSPACE 环境变量 + /memory
     3. 当前工作目录 + /memory
     """
@@ -582,7 +581,7 @@ def calculate_importance(content):
     """
     content_lower = content.lower()
 
-    # 1. 检查内在重要性（从高到低）
+    # 1. 检查内在重要性(从高到低)
     for category in ["identity_health_safety", "preference_relation_status", "project_task_goal", "temporary"]:
         rule = IMPORTANCE_RULES[category]
         for keyword in rule["keywords"]:
@@ -617,15 +616,15 @@ def calculate_importance(content):
 
 def rule_filter(segments, threshold=0.3, use_llm_fallback=True):
     """
-    Phase 2: 重要性筛选（v1.1.7：智能 LLM 集成）
+    Phase 2: 重要性筛选(v1.1.7:智能 LLM 集成)
 
-    v1.1.7 改进：
-    - 语义复杂度检测：识别需要 LLM 处理的复杂内容
-    - 扩大 LLM 触发区间：0.2~0.5（原 0.2~0.3）
-    - LLM 失败回退：失败时回退到规则结果，不丢弃
+    v1.1.7 改进:
+    - 语义复杂度检测:识别需要 LLM 处理的复杂内容
+    - 扩大 LLM 触发区间:0.2~0.5(原 0.2~0.3)
+    - LLM 失败回退:失败时回退到规则结果,不丢弃
 
     输入: 语义片段列表
-    输出: 筛选后的重要片段列表（带 importance 标注）
+    输出: 筛选后的重要片段列表(带 importance 标注)
     """
     config = get_config()
     llm_enabled = config.get("llm_fallback", {}).get("enabled", True) and use_llm_fallback
@@ -638,7 +637,7 @@ def rule_filter(segments, threshold=0.3, use_llm_fallback=True):
         content = segment.get("content", "") if isinstance(segment, dict) else segment
         source = segment.get("source", "unknown") if isinstance(segment, dict) else "unknown"
 
-        # v1.2.0: 前置废话过滤（跳过明显废话，不进入 LLM）
+        # v1.2.0: 前置废话过滤(跳过明显废话,不进入 LLM)
         is_noise_content, noise_category = is_noise(content)
         if is_noise_content:
             noise_skipped += 1
@@ -649,7 +648,7 @@ def rule_filter(segments, threshold=0.3, use_llm_fallback=True):
 
         # 2. v1.1.7: 智能 LLM 集成
         if V1_1_7_ENABLED and llm_enabled and phase2_llm:
-            # 使用智能筛选（自动决定是否调用 LLM）
+            # 使用智能筛选(自动决定是否调用 LLM)
             smart_result = smart_filter_segment(
                 content=content,
                 rule_importance=rule_importance,
@@ -679,7 +678,7 @@ def rule_filter(segments, threshold=0.3, use_llm_fallback=True):
                 }
                 filtered.append(result)
         else:
-            # 回退到原有逻辑（v1.1.6 及之前）
+            # 回退到原有逻辑(v1.1.6 及之前)
             if rule_importance >= threshold:
                 result = {
                     "content": content,
@@ -690,7 +689,7 @@ def rule_filter(segments, threshold=0.3, use_llm_fallback=True):
                 }
                 filtered.append(result)
             elif rule_importance >= threshold - 0.1:
-                # 不确定区间，尝试 LLM
+                # 不确定区间,尝试 LLM
                 if llm_enabled and phase2_llm:
                     llm_result = llm_filter_segment(content)
                     if llm_result:
@@ -718,24 +717,24 @@ def llm_filter_segment(content):
     """
     LLM_STATS["phase2_calls"] += 1
 
-    system_prompt = """你是一个记忆重要性评估专家。
-评估用户输入的重要性（0-1），并分类。
+    system_prompt = """你是一个记忆重要性评估专家.
+评估用户输入的重要性(0-1),并分类.
 
-分类标准：
-- identity_health_safety (1.0): 身份、健康、安全相关
-- preference_relation_status (0.8): 偏好、关系、状态变更
-- project_task_goal (0.7): 项目、任务、目标
+分类标准:
+- identity_health_safety (1.0): 身份/健康/安全相关
+- preference_relation_status (0.8): 偏好/关系/状态变更
+- project_task_goal (0.7): 项目/任务/目标
 - general_fact (0.5): 一般事实
 - temporary (0.2): 临时信息
 
-返回 JSON 格式：
+返回 JSON 格式:
 {"importance": 0.8, "category": "preference_relation_status", "reason": "简短理由"}"""
 
-    prompt = f"""评估以下内容的重要性：
+    prompt = f"""评估以下内容的重要性:
 
-内容：{content}
+内容:{content}
 
-返回 JSON："""
+返回 JSON:"""
 
     success, result, error = call_llm(prompt, system_prompt, max_tokens=100)
 
@@ -766,15 +765,15 @@ def extract_entities(content, memory_dir=None, use_llm_fallback=True):
     """
     从内容中提取实体
 
-    v1.1.6 改进：四层识别架构
-    - Layer 0: 引号实体（优先级最高，v1.1.6 新增）
-    - Layer 1: 硬编码模式（ENTITY_PATTERNS）
-    - Layer 2: 学习过的实体（learned_entities.json）
+    v1.1.6 改进:四层识别架构
+    - Layer 0: 引号实体(优先级最高,v1.1.6 新增)
+    - Layer 1: 硬编码模式(ENTITY_PATTERNS)
+    - Layer 2: 学习过的实体(learned_entities.json)
     - Layer 3: LLM 提取 + 自动学习
 
     参数:
         content: 要提取的内容
-        memory_dir: 记忆目录（用于加载学习实体，可选）
+        memory_dir: 记忆目录(用于加载学习实体,可选)
         use_llm_fallback: 是否启用 LLM 兜底
 
     返回:
@@ -785,20 +784,20 @@ def extract_entities(content, memory_dir=None, use_llm_fallback=True):
     entities = []
     matched_positions = set()
 
-    # ===== Layer 0: 引号实体（v1.1.6 新增，优先级最高）=====
-    # 引号内的内容通常是专有名词，优先提取
+    # ===== Layer 0: 引号实体(v1.1.6 新增,优先级最高)=====
+    # 引号内的内容通常是专有名词,优先提取
     for pattern in QUOTED_ENTITY_PATTERNS:
         for match in re.finditer(pattern, content):
-            # 提取引号内的内容（group(1) 是括号捕获的部分）
+            # 提取引号内的内容(group(1) 是括号捕获的部分)
             quoted_text = match.group(1) if match.lastindex else match.group()
             if quoted_text and len(quoted_text) > 1 and quoted_text not in entities:
                 entities.append(quoted_text)
-                # 标记位置，避免后续重复匹配
+                # 标记位置,避免后续重复匹配
                 start, end = match.span()
                 for i in range(start, end):
                     matched_positions.add(i)
 
-    # ===== Layer 1: 硬编码模式（原有逻辑）=====
+    # ===== Layer 1: 硬编码模式(原有逻辑)=====
     for entity_type, config in ENTITY_PATTERNS.items():
         # 1. 固定词匹配
         if "fixed" in config:
@@ -818,7 +817,7 @@ def extract_entities(content, memory_dir=None, use_llm_fallback=True):
                         for i in range(start, end):
                             matched_positions.add(i)
 
-    # ===== Layer 2: 学习过的实体（v1.1.5 新增）=====
+    # ===== Layer 2: 学习过的实体(v1.1.5 新增)=====
     if V1_1_5_ENABLED and memory_dir:
         from v1_1_5_entity_system import load_learned_entities
 
@@ -839,7 +838,7 @@ def extract_entities(content, memory_dir=None, use_llm_fallback=True):
             except re.error:
                 continue
 
-    # ===== Layer 3: LLM 兜底（v1.1.5 新增）=====
+    # ===== Layer 3: LLM 兜底(v1.1.5 新增)=====
     if not entities and V1_1_5_ENABLED and use_llm_fallback:
         config = get_config()
         llm_enabled = config.get("llm_fallback", {}).get("enabled", True)
@@ -855,10 +854,10 @@ def extract_entities(content, memory_dir=None, use_llm_fallback=True):
 
                     learn_new_entities(entities, memory_dir)
 
-    # ===== 去重和过滤（原有逻辑）=====
+    # ===== 去重和过滤(原有逻辑)=====
     entities = [e for e in set(entities) if e and len(e) > 1]
 
-    # 过滤：如果短实体是长实体的子串，移除短实体
+    # 过滤:如果短实体是长实体的子串,移除短实体
     final_entities = []
     sorted_entities = sorted(entities, key=len, reverse=True)
 
@@ -911,10 +910,10 @@ def classify_memory_type(content, importance):
 
 def template_extract(filtered_segments, use_llm_fallback=True, memory_dir=None):
     """
-    Phase 3: 深度提取（v1.1.5：三层实体识别 + LLM 兜底）
+    Phase 3: 深度提取(v1.1.5:三层实体识别 + LLM 兜底)
     将筛选后的片段转为结构化 facts/beliefs
 
-    模板匹配优先，LLM 兜底
+    模板匹配优先,LLM 兜底
     """
     config = get_config()
     llm_enabled = config.get("llm_fallback", {}).get("enabled", True) and use_llm_fallback
@@ -932,7 +931,7 @@ def template_extract(filtered_segments, use_llm_fallback=True, memory_dir=None):
         source = segment.get("source", "unknown")
         method = segment.get("method", "rule")
 
-        # 1. v1.1.5: 三层实体识别（传入 memory_dir）
+        # 1. v1.1.5: 三层实体识别(传入 memory_dir)
         entities = extract_entities(content, memory_dir=memory_dir, use_llm_fallback=llm_enabled and phase3_llm)
         mem_type = classify_memory_type(content, importance)
 
@@ -967,7 +966,7 @@ def template_extract(filtered_segments, use_llm_fallback=True, memory_dir=None):
             if tier1_result:
                 record["expires_at"] = tier1_result.get("expires_at")
                 record["is_permanent"] = tier1_result.get("is_permanent", True)
-            # 第二级 LLM 介入（灰色地带）
+            # 第二级 LLM 介入(灰色地带)
             elif 0.35 <= importance <= 0.70:
                 llm_result = call_llm_time_sensor(content, importance)
                 record["expires_at"] = llm_result.get("expires_at")
@@ -992,21 +991,21 @@ def llm_extract_entities(content):
     """
     LLM_STATS["phase3_calls"] += 1
 
-    system_prompt = """你是一个实体提取专家。
-从用户输入中提取关键实体（人物、地点、项目、组织等）。
+    system_prompt = """你是一个实体提取专家.
+从用户输入中提取关键实体(人物/地点/项目/组织等).
 
-返回 JSON 格式：
+返回 JSON 格式:
 {"entities": ["实体1", "实体2"], "type": "fact", "reason": "简短理由"}
 
-type 可选值：
+type 可选值:
 - fact: 确定的事实
 - belief: 推断或不确定的信息"""
 
-    prompt = f"""从以下内容中提取实体：
+    prompt = f"""从以下内容中提取实体:
 
-内容：{content}
+内容:{content}
 
-返回 JSON："""
+返回 JSON:"""
 
     success, result, error = call_llm(prompt, system_prompt, max_tokens=150)
 
@@ -1025,21 +1024,21 @@ type 可选值：
 
 
 # ============================================================
-# Phase 4a: Facts 去重合并
+# Phase-4A: Facts 去重合并
 # ============================================================
 
 # v1.1.6: 去重配置
 DEDUP_CONFIG = {
-    "min_overlap_ratio": 0.3,  # 最小重叠比例（30%）
-    "tier1_penalty": 0.1,  # Tier 1 信号：强降权（保留 10%）
-    "tier2_penalty": 0.4,  # Tier 2 信号：弱降权（保留 40%）
+    "min_overlap_ratio": 0.3,  # 最小重叠比例(30%)
+    "tier1_penalty": 0.1,  # Tier 1 信号:强降权(保留 10%)
+    "tier2_penalty": 0.4,  # Tier 2 信号:弱降权(保留 40%)
 }
 
 
 def tokenize_chinese(text):
     """
-    简单的中文分词（字符级 + 英文单词）
-    对于中文，使用 2-gram；对于英文，使用空格分词
+    简单的中文分词(字符级 + 英文单词)
+    对于中文,使用 2-gram;对于英文,使用空格分词
     """
     import re
 
@@ -1054,7 +1053,7 @@ def tokenize_chinese(text):
     for i in range(len(chinese_chars) - 1):
         tokens.add(chinese_chars[i] + chinese_chars[i + 1])
 
-    # 单个中文字符也加入（用于短文本）
+    # 单个中文字符也加入(用于短文本)
     tokens.update(chinese_chars)
 
     return tokens
@@ -1062,8 +1061,8 @@ def tokenize_chinese(text):
 
 def deduplicate_facts(new_facts, existing_facts):
     """
-    Phase 4a: Facts 去重合并 + 冲突检测
-    v1.3.0: 优先使用 MemoryOperator + ConflictResolver，降级回原有规则
+    Phase-4A - Facts dedup + conflict detection
+    v1.3.0: 优先使用 MemoryOperator + ConflictResolver,降级回原有规则
 
     返回: (merged_facts, duplicate_count, downgraded_count)
     """
@@ -1106,7 +1105,7 @@ def _deduplicate_with_operator(new_facts, existing_facts):
                 target["supersedes"] = json.dumps([target.get("id")])
                 downgraded_count += 1
             else:
-                # KEEP 旧记忆，丢弃新记忆
+                # KEEP 旧记忆,丢弃新记忆
                 duplicate_count += 1
 
         elif operation == "DELETE" and target:
@@ -1121,7 +1120,7 @@ def _deduplicate_with_operator(new_facts, existing_facts):
 
 
 def _deduplicate_legacy(new_facts, existing_facts):
-    """原有去重逻辑（v1.1.6），作为降级兜底"""
+    """原有去重逻辑(v1.1.6),作为降级兜底"""
     merged = []
     duplicate_count = 0
     downgraded_count = 0
@@ -1190,13 +1189,13 @@ def _deduplicate_legacy(new_facts, existing_facts):
 
 
 # ============================================================
-# Phase 4b: Beliefs 验证 - code_verify_belief()
+# Phase-4B: Beliefs 验证 - code_verify_belief()
 # ============================================================
 
 
 def code_verify_belief(belief, facts):
     """
-    Phase 4b: Beliefs 验证
+    Phase-4B: Beliefs 验证
     检查 belief 是否被 facts 证实
 
     返回: ("confirmed" | "contradicted" | "unchanged", updated_belief)
@@ -1214,7 +1213,7 @@ def code_verify_belief(belief, facts):
             continue
 
         # 检查内容关系
-        # 1. 证实：fact 包含 belief 的核心内容
+        # 1. 证实:fact 包含 belief 的核心内容
         belief_words = set(belief_content.split())
         fact_words = set(fact_content.split())
         overlap_ratio = len(belief_words & fact_words) / max(len(belief_words), 1)
@@ -1228,7 +1227,7 @@ def code_verify_belief(belief, facts):
             upgraded["verified_at"] = now_iso()
             return "confirmed", upgraded
 
-        # 2. 矛盾检测（简单版：否定词）
+        # 2. 矛盾检测(简单版:否定词)
         negation_words = ["不", "没", "无", "非", "否", "别", "不是", "没有"]
         belief_has_neg = any(neg in belief_content for neg in negation_words)
         fact_has_neg = any(neg in fact_content for neg in negation_words)
@@ -1244,14 +1243,14 @@ def code_verify_belief(belief, facts):
 
 
 # ============================================================
-# Phase 4c: Summaries 生成
+# Phase-4C: Summaries 生成
 # ============================================================
 
 
 def generate_summaries(facts, existing_summaries, trigger_count=3):
     """
-    Phase 4c: Summaries 生成
-    当同一实体有 >= trigger_count 个 facts 时，生成摘要
+    Phase-4C: Summaries 生成
+    当同一实体有 >= trigger_count 个 facts 时,生成摘要
 
     返回: 新生成的 summaries 列表
     """
@@ -1273,14 +1272,14 @@ def generate_summaries(facts, existing_summaries, trigger_count=3):
     # 为符合条件的实体生成摘要
     for entity, entity_facts in facts_by_entity.items():
         if len(entity_facts) >= trigger_count and entity not in summarized_entities:
-            # 按重要性排序，取 top facts
+            # 按重要性排序,取 top facts
             sorted_facts = sorted(entity_facts, key=lambda x: x.get("importance", 0), reverse=True)
             top_facts = sorted_facts[:5]
 
-            # 生成摘要内容（简单拼接）
+            # 生成摘要内容(简单拼接)
             summary_content = f"关于{entity}的信息: " + "; ".join([f["content"][:30] for f in top_facts])
 
-            # 计算摘要重要性（取平均）
+            # 计算摘要重要性(取平均)
             avg_importance = sum(f.get("importance", 0.5) for f in top_facts) / len(top_facts)
 
             summary = {
@@ -1298,13 +1297,13 @@ def generate_summaries(facts, existing_summaries, trigger_count=3):
 
 
 # ============================================================
-# Phase 4d: Entities 更新
+# Phase-4D: Entities 更新
 # ============================================================
 
 
 def update_entities(facts, beliefs, summaries, memory_dir):
     """
-    Phase 4d: Entities 更新
+    Phase-4D: Entities 更新
     维护实体档案
     """
     entities_dir = memory_dir / "layer2/entities"
@@ -1413,7 +1412,7 @@ def get_cache_key(query):
 
 
 def get_cached_result(query):
-    """获取缓存结果（v1.3.0: 优先用 CacheManager L2 缓存）"""
+    """获取缓存结果(v1.3.0: 优先用 CacheManager L2 缓存)"""
     key = get_cache_key(query)
 
     if CACHE_MANAGER_ENABLED and _cache_manager_instance:
@@ -1435,7 +1434,7 @@ def get_cached_result(query):
 
 
 def set_cached_result(query, result):
-    """设置缓存结果（v1.3.0: 同时写入 CacheManager L2 缓存）"""
+    """设置缓存结果(v1.3.0: 同时写入 CacheManager L2 缓存)"""
     key = get_cache_key(query)
 
     if CACHE_MANAGER_ENABLED and _cache_manager_instance:
@@ -1469,7 +1468,7 @@ def detect_trigger_layer(query):
         if matched:
             return 1, trigger_type, matched
 
-    # Layer 2: 默认（任务类型映射）
+    # Layer 2: 默认(任务类型映射)
     return 2, "default", []
 
 
@@ -1479,17 +1478,17 @@ def classify_query_type(query, trigger_layer):
     """
     query_lower = query.lower()
 
-    # 精准查询：具体问题、特定实体
+    # 精准查询:具体问题/特定实体
     precise_indicators = ["是什么", "是谁", "在哪", "什么时候", "多少", "具体"]
     if any(ind in query_lower for ind in precise_indicators) or trigger_layer == 0:
         return "precise"
 
-    # 广度查询：总结、概览、所有
+    # 广度查询:总结/概览/所有
     broad_indicators = ["所有", "全部", "总结", "概括", "列出", "有哪些"]
     if any(ind in query_lower for ind in broad_indicators):
         return "broad"
 
-    # 默认：主题查询
+    # 默认:主题查询
     return "topic"
 
 
@@ -1508,9 +1507,9 @@ def keyword_search(query, memory_dir, limit=20):
     with open(keywords_path, encoding="utf-8") as f:
         keywords_index = json.load(f)
 
-    # 提取查询关键词（改进版）
+    # 提取查询关键词(改进版)
     query_words = set()
-    segments = re.split(r'[，。！？、；：""' r"（）\[\]【】\s]+", query)
+    segments = re.split(r'[,.!?/;:""' r"()\[\][]\s]+", query)
     for seg in segments:
         seg = seg.strip()
         if len(seg) >= 2:
@@ -1617,7 +1616,7 @@ def rerank_results(results, query, limit, memory_dir=None):
     """
     重排序检索结果
 
-    v1.1.5 改进：集成实体隔离（竞争性抑制）
+    v1.1.5 改进:集成实体隔离(竞争性抑制)
 
     综合考虑: 匹配分数 + 记忆重要性 + 记忆score + 实体隔离
     """
@@ -1625,7 +1624,7 @@ def rerank_results(results, query, limit, memory_dir=None):
     for r in results:
         r["final_score"] = r.get("score", 0) * 0.4 + r.get("importance", 0.5) * 0.3 + r.get("memory_score", 0.5) * 0.3
 
-    # 2. v1.1.5: 实体隔离（竞争性抑制）
+    # 2. v1.1.5: 实体隔离(竞争性抑制)
     if V1_1_5_ENABLED and results:
         from v1_1_5_entity_system import (
             ENTITY_SYSTEM_CONFIG,
@@ -1673,7 +1672,7 @@ def rerank_results(results, query, limit, memory_dir=None):
 def format_injection(results, confidence_threshold_high=0.8, confidence_threshold_low=0.5):
     """
     格式化注入结果
-    - 高置信度(>0.8): 直接注入，无标记
+    - 高置信度(>0.8): 直接注入,无标记
     - 中置信度(0.5-0.8): 注入 + 来源标记
     - 低置信度(<0.5): 仅提供引用路径
     """
@@ -1713,12 +1712,12 @@ def _get_qmd_env():
 
 def qmd_available(memory_dir=None):
     """
-    检查 QMD 是否可用（v1.2.1 增强版）
+    检查 QMD 是否可用(v1.2.1 增强版)
 
     检查项:
     1. qmd 命令是否存在
     2. qmd status 是否正常
-    3. health.lock 是否存在（写入中断标记）
+    3. health.lock 是否存在(写入中断标记)
     """
     try:
         env = _get_qmd_env()
@@ -1726,12 +1725,12 @@ def qmd_available(memory_dir=None):
         if result.returncode != 0:
             return False
 
-        # v1.2.1: 检查 health.lock（写入中断标记）
+        # v1.2.1: 检查 health.lock(写入中断标记)
         if memory_dir is None:
             memory_dir = get_memory_dir()
         qmd_dir = Path(memory_dir) / ".qmd"
         if (qmd_dir / "health.lock").exists():
-            # 上次写入中断，静默 fallback 到非 QMD 模式
+            # 上次写入中断,静默 fallback 到非 QMD 模式
             return False
 
         return True
@@ -1755,18 +1754,18 @@ def qmd_search(query, collection="curated", limit=20):
     try:
         env = _get_qmd_env()
 
-        # 提取关键词（优先英文/专有名词，然后中文实体词）
+        # 提取关键词(优先英文/专有名词,然后中文实体词)
         keywords = []
-        # 英文单词和专有名词（优先）
+        # 英文单词和专有名词(优先)
         keywords.extend(re.findall(r"[A-Za-z][A-Za-z0-9_-]+", query))
-        # 中文词组（3字以上，避免"是谁"这类疑问词）
+        # 中文词组(3字以上,避免"是谁"这类疑问词)
         keywords.extend(re.findall(r"[\u4e00-\u9fa5]{3,}", query))
 
-        # 如果没有提取到关键词，尝试2字中文词
+        # 如果没有提取到关键词,尝试2字中文词
         if not keywords:
             keywords.extend(re.findall(r"[\u4e00-\u9fa5]{2,}", query))
 
-        # 如果还是没有，用原始查询
+        # 如果还是没有,用原始查询
         search_query = " ".join(keywords) if keywords else query
 
         # 使用 BM25 搜索
@@ -1796,7 +1795,7 @@ def _parse_qmd_output(output):
     in_content = False
 
     for line in output.split("\n"):
-        # 新结果开始：qmd://curated/facts.md:7 #8ec92f
+        # 新结果开始:qmd://curated/facts.md:7 #8ec92f
         if line.startswith("qmd://"):
             if current:
                 results.append(current)
@@ -1838,7 +1837,7 @@ def extract_memory_id_from_snippet(snippet):
     """
     从 QMD 返回的 snippet 中提取 memory_id
 
-    格式示例：
+    格式示例:
     [f_20260207_a6b928] 用户名字是张玉魁...
     """
     match = re.search(r"\[([fbs]_\d{8}_[a-f0-9]+)\]", snippet)
@@ -1847,11 +1846,11 @@ def extract_memory_id_from_snippet(snippet):
 
 def export_for_qmd(memory_dir):
     """
-    将 JSONL 转换为 QMD 友好的 Markdown 格式（v1.2.1 增强版）
+    将 JSONL 转换为 QMD 友好的 Markdown 格式(v1.2.1 增强版)
 
     新增:
-    - health.lock 写入锁（防止脏数据）
-    - meta.json 元数据（版本、更新时间、记忆数）
+    - health.lock 写入锁(防止脏数据)
+    - meta.json 元数据(版本/更新时间/记忆数)
     - .qmd/ 目录结构
     """
     memory_dir = Path(memory_dir)
@@ -1861,7 +1860,7 @@ def export_for_qmd(memory_dir):
     qmd_index_dir = qmd_dir / "index"
     qmd_index_dir.mkdir(parents=True, exist_ok=True)
 
-    # 同时保留原有位置（兼容性）
+    # 同时保留原有位置(兼容性)
     legacy_dir = memory_dir / "layer2/qmd-index"
     legacy_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1880,7 +1879,7 @@ def export_for_qmd(memory_dir):
             md_content += f"> Generated: {now_iso()} | Count: {len(records)}\n\n"
 
             for r in records:
-                # 格式：[memory_id] 内容
+                # 格式:[memory_id] 内容
                 md_content += f"[{r['id']}] {r['content']}\n\n"
 
                 if r.get("entities"):
@@ -1923,20 +1922,20 @@ def export_for_qmd(memory_dir):
 
 def router_search(query, memory_dir=None, use_qmd=True, use_vector=True):
     """
-    Router 主入口：智能检索记忆（v1.6.0 向量检索增强版）
+    Router 主入口:智能检索记忆(v1.6.0 向量检索增强版)
 
     搜索顺序:
     1. Pending (Hot Store) - 未索引的新记忆
-    2. 向量检索 - 语义相似度匹配（v1.6.0 新增）
-    3. QMD 索引 - 已索引，快速语义搜索
+    2. 向量检索 - 语义相似度匹配(v1.6.0 新增)
+    3. QMD 索引 - 已索引,快速语义搜索
     4. 关键词/实体索引 - 原有逻辑
     5. LLM 兜底 - QMD 不可用时
 
     参数:
         query: 用户查询
-        memory_dir: 记忆目录（可选）
-        use_qmd: 是否使用 QMD 检索（默认 True）
-        use_vector: 是否使用向量检索（默认 True）
+        memory_dir: 记忆目录(可选)
+        use_qmd: 是否使用 QMD 检索(默认 True)
+        use_vector: 是否使用向量检索(默认 True)
 
     返回:
         {
@@ -2084,7 +2083,7 @@ def router_search(query, memory_dir=None, use_qmd=True, use_vector=True):
 
 def _vector_search(query: str, memory_dir: Path, limit: int = 20) -> list:
     """
-    向量检索（v1.6.0 新增）
+    向量检索(v1.6.0 新增)
 
     使用混合检索引擎进行语义搜索
     """
@@ -2156,10 +2155,10 @@ def _get_active_memory_count(memory_dir):
 
 
 def _load_all_active_records(memory_dir):
-    """加载所有活跃记录，返回 {id: record} 字典
+    """加载所有活跃记录,返回 {id: record} 字典
     v1.3.0: 超过 SCALED_BACKEND_THRESHOLD 自动切换 ScaledBackend
     """
-    # 阈值判断：超过 5000 条自动启用 ScaledBackend
+    # 阈值判断:超过 5000 条自动启用 ScaledBackend
     if SCALED_BACKEND_AVAILABLE:
         try:
             count = _get_active_memory_count(memory_dir)
@@ -2300,18 +2299,18 @@ def cmd_init(args):
 > 生成时间: {now_iso()} | 状态: 初始化
 
 ## 说明
-记忆系统已初始化，尚无记忆数据。
-执行 `memory.py consolidate` 开始整合记忆。
+记忆系统已初始化,尚无记忆数据.
+执行 `memory.py consolidate` 开始整合记忆.
 """
         with open(snapshot_path, "w", encoding="utf-8") as f:
             f.write(snapshot_content)
 
-    # v1.2.1: 创建 .gitignore（保护 .qmd/ 目录）
+    # v1.2.1: 创建 .gitignore(保护 .qmd/ 目录)
     gitignore_path = memory_dir / ".gitignore"
     if not gitignore_path.exists():
         with open(gitignore_path, "w", encoding="utf-8") as f:
             f.write("# Memory System v1.2.1\n")
-            f.write("# QMD 索引目录（二进制文件，不应提交到 git）\n")
+            f.write("# QMD 索引目录(二进制文件,不应提交到 git)\n")
             f.write(".qmd/\n")
 
     print("✅ 记忆系统初始化完成")
@@ -2329,7 +2328,7 @@ def cmd_status(args):
     memory_dir = get_memory_dir()
 
     if not memory_dir.exists():
-        print("❌ 记忆系统未初始化，请先运行: memory.py init")
+        print("❌ 记忆系统未初始化,请先运行: memory.py init")
         return
 
     # 读取状态
@@ -2520,7 +2519,7 @@ def cmd_consolidate(args):
     memory_dir = get_memory_dir()
 
     if not memory_dir.exists():
-        print("❌ 记忆系统未初始化，请先运行: memory.py init")
+        print("❌ 记忆系统未初始化,请先运行: memory.py init")
         return
 
     config = get_config()
@@ -2553,16 +2552,16 @@ def cmd_consolidate(args):
         # 用于存储中间结果
         phase_data = state.get("phase_data", {})
 
-        # Phase 0: 清理过期记忆（v1.1.4 新增）
+        # Phase 0: 清理过期记忆(v1.1.4 新增)
         if V1_1_ENABLED and (not args.phase or args.phase == 0):
             print("\n🗑️ Phase 0: 清理过期记忆")
             expired_count = phase0_expire_memories(memory_dir)
             print(f"   归档 {expired_count} 条过期记忆")
             print("   ✅ 完成")
 
-        # Phase 1: 轻量全量（模拟 - 需要接入 OpenClaw session）
+        # Phase 1: 轻量全量(模拟 - 需要接入 OpenClaw session)
         if not args.phase or args.phase == 1:
-            print("\n📋 Phase 1: 轻量全量（切分片段）")
+            print("\n📋 Phase 1: 轻量全量(切分片段)")
             # TODO: 接入 OpenClaw session 数据
             # 目前使用模拟数据或从 stdin 读取
             if args.input:
@@ -2577,7 +2576,7 @@ def cmd_consolidate(args):
                 phase_data["segments"] = segments
                 print(f"   从文件读取 {len(segments)} 个片段")
             else:
-                print("   [跳过] 无输入数据，使用 --input 指定输入文件")
+                print("   [跳过] 无输入数据,使用 --input 指定输入文件")
                 phase_data["segments"] = []
             print("   ✅ 完成")
 
@@ -2632,7 +2631,7 @@ def cmd_consolidate(args):
                 # 追加新 facts
                 for fact in merged_facts:
                     append_jsonl(memory_dir / "layer2/active/facts.jsonl", fact)
-                # 如果有降权，需要重写 existing_facts
+                # 如果有降权,需要重写 existing_facts
                 if downgrade_count > 0:
                     save_jsonl(memory_dir / "layer2/active/facts.jsonl", existing_facts)
             else:
@@ -2689,7 +2688,7 @@ def cmd_consolidate(args):
             decay_rates = config["decay_rates"]
             archive_threshold = config["thresholds"]["archive"]
 
-            # 5a: 应用访问加成（v1.1.5 已在 v1_1_helpers.calculate_access_boost 中修复）
+            # 5a: 应用访问加成(v1.1.5 已在 v1_1_helpers.calculate_access_boost 中修复)
             if V1_1_ENABLED:
                 print("   5a: 应用访问加成")
                 for mem_type in ["facts", "beliefs", "summaries"]:
@@ -2710,7 +2709,7 @@ def cmd_consolidate(args):
                     f"       保留: {cleanup_stats['exact_remaining']} 实体, {cleanup_stats['patterns_remaining']} 模式"
                 )
 
-            # 5c: 衰减（含访问保护）
+            # 5c: 衰减(含访问保护)
             print("   5c: 衰减更新")
             archived_count = 0
             for mem_type in ["facts", "beliefs", "summaries"]:
@@ -2745,7 +2744,7 @@ def cmd_consolidate(args):
                     existing = load_jsonl(archive_path)
                     save_jsonl(archive_path, existing + to_archive)
 
-            print(f"   衰减完成，归档 {archived_count} 条")
+            print(f"   衰减完成,归档 {archived_count} 条")
             print("   ✅ 完成")
 
         # Phase 6: 索引更新
@@ -2757,23 +2756,23 @@ def cmd_consolidate(args):
 
             # 中文分词辅助函数
             def extract_keywords(text):
-                """提取关键词（改进版：保留连字符词）"""
+                """提取关键词(改进版:保留连字符词)"""
                 import re
 
                 keywords = set()
 
-                # 1. 优先提取连字符词（memory-system, v1.1, API-key等）
+                # 1. 优先提取连字符词(memory-system, v1.1, API-key等)
                 hyphen_words = re.findall(r"[a-zA-Z0-9][-a-zA-Z0-9.]+", text)
                 for word in hyphen_words:
                     if len(word) > 1:
                         keywords.add(word.lower())
 
-                # 2. 提取中文词组（2字以上）
+                # 2. 提取中文词组(2字以上)
                 chinese_words = re.findall(r"[\u4e00-\u9fa5]{2,}", text)
                 for word in chinese_words:
                     keywords.add(word)
 
-                # 3. 提取纯英文单词（不含连字符的）
+                # 3. 提取纯英文单词(不含连字符的)
                 english_words = re.findall(r"\b[a-zA-Z]{2,}\b", text)
                 for word in english_words:
                     keywords.add(word.lower())
@@ -2822,13 +2821,13 @@ def cmd_consolidate(args):
                     print(f"   ⚠️ QMD 更新失败: {e}")
                     print("   继续使用基础索引...")
 
-        # Phase 6.8: 主动记忆引擎更新（v1.4.0 新增）
+        # Phase 6.8: 主动记忆引擎更新(v1.4.0 新增)
         if PROACTIVE_ENABLED and (not args.phase or args.phase in [6, 7]):
             try:
                 print("\n🤖 Phase 6.8: 主动记忆引擎更新")
                 proactive_engine = create_engine(memory_dir)
 
-                # 用最新的 facts 喂给引擎，更新意图状态
+                # 用最新的 facts 喂给引擎,更新意图状态
                 recent_facts = load_jsonl(memory_dir / "layer2/active/facts.jsonl")
                 recent_facts.sort(key=lambda x: x.get("created", ""), reverse=True)
 
@@ -2903,7 +2902,7 @@ def cmd_consolidate(args):
             if not high:
                 snapshot += "- (无)\n"
 
-            # 新增：降权记忆标注
+            # 新增:降权记忆标注
             if downgraded:
                 snapshot += """
 ## 📉 已降权记忆 (冲突覆盖)
@@ -2971,8 +2970,8 @@ def cmd_consolidate(args):
             if total_calls > 0:
                 INTEGRATION_STATS.print_summary()
             else:
-                print("\n💰 Token 节省: 100% (纯规则处理，无 LLM 调用)")
-        # 回退到原有统计（v1.1.6 及之前）
+                print("\n💰 Token 节省: 100% (纯规则处理,无 LLM 调用)")
+        # 回退到原有统计(v1.1.6 及之前)
         elif LLM_STATS["phase2_calls"] > 0 or LLM_STATS["phase3_calls"] > 0:
             print("\n📊 LLM 调用统计:")
             print(f"   Phase 2 (筛选): {LLM_STATS['phase2_calls']} 次")
@@ -2981,7 +2980,7 @@ def cmd_consolidate(args):
             if LLM_STATS["errors"] > 0:
                 print(f"   ⚠️  错误: {LLM_STATS['errors']} 次")
         else:
-            print("\n💰 Token 节省: 100% (纯规则处理，无 LLM 调用)")
+            print("\n💰 Token 节省: 100% (纯规则处理,无 LLM 调用)")
 
     except Exception as e:
         state["retry_count"] = state.get("retry_count", 0) + 1
@@ -3063,7 +3062,7 @@ def cmd_export_qmd(args):
             print("🔄 自动更新 QMD 索引...")
             try:
                 env = _get_qmd_env()
-                # 添加到 collection（如果已存在则跳过）
+                # 添加到 collection(如果已存在则跳过)
                 result1 = subprocess.run(
                     ["qmd", "collection", "add", str(qmd_index_dir), "--name", "curated", "--mask", "*.md"],
                     capture_output=True,
@@ -3073,7 +3072,7 @@ def cmd_export_qmd(args):
                 )
                 if result1.returncode != 0:
                     if "already exists" in result1.stderr:
-                        print("   ℹ️ collection 'curated' 已存在，跳过添加")
+                        print("   ℹ️ collection 'curated' 已存在,跳过添加")
                     else:
                         print(f"   ⚠️ collection add 失败: {result1.stderr.strip()}")
                 else:
@@ -3093,7 +3092,7 @@ def cmd_export_qmd(args):
                 print(f"   ⚠️ 执行失败: {e}")
         else:
             print()
-            print("⚠️ QMD 不可用，跳过自动更新")
+            print("⚠️ QMD 不可用,跳过自动更新")
             print("💡 手动运行以下命令:")
             print(f"   qmd collection add {qmd_index_dir} --name curated --mask '*.md'")
             print("   qmd update")
@@ -3110,17 +3109,17 @@ def cmd_export_qmd(args):
 
 def cmd_inject(args):
     """
-    动态注入：根据用户消息检索相关记忆，输出可直接注入 prompt 的内容
+    动态注入:根据用户消息检索相关记忆,输出可直接注入 prompt 的内容
 
-    用法：
+    用法:
         memory.py inject "用户消息" [--max-tokens 500] [--format text|json]
 
-    输出格式（text）：
+    输出格式(text):
         ## 相关记忆
         - [fact] 用户名字是张玉魁...
         - [belief] Ktao认为记忆系统很重要...
 
-    输出格式（json）：
+    输出格式(json):
         {"direct": [...], "marked": [...], "reference": [...]}
     """
     memory_dir = get_memory_dir()
@@ -3151,7 +3150,7 @@ def cmd_inject(args):
     if args.format == "json":
         print(json.dumps(injection, ensure_ascii=False, indent=2))
     else:
-        # 文本格式，适合直接注入 prompt
+        # 文本格式,适合直接注入 prompt
         lines = []
 
         # 直接注入的高置信度记忆
@@ -3172,7 +3171,7 @@ def cmd_inject(args):
                 source = item.get("source", "unknown")
                 lines.append(f"- [{type_tag}] {content} (ref:{source})")
 
-        # 控制总 token 数（粗略估计：1中文字≈1.5token）
+        # 控制总 token 数(粗略估计:1中文字≈1.5token)
         output = "\n".join(lines)
         estimated_tokens = len(output) * 1.5
         if estimated_tokens > max_tokens:
@@ -3226,10 +3225,10 @@ def cmd_validate(args):
 # ============================================================
 
 # ============================================================
-# v1.2.2 白天轻量检查（Mini-Consolidate）
+# v1.2.2 白天轻量检查(Mini-Consolidate)
 # ============================================================
 
-# Urgent 检测规则（重要性 > 0.8 的内容）
+# Urgent 检测规则(重要性 > 0.8 的内容)
 URGENT_PATTERNS = {
     # 身份/健康/安全相关 - 最高优先级
     "critical": {
@@ -3241,7 +3240,7 @@ URGENT_PATTERNS = {
         "keywords": ["记住", "永远记住", "一定要记住", "重要", "关键", "决定", "确定", "最终"],
         "threshold": 0.8,
     },
-    # 时间敏感（带明确时间点）
+    # 时间敏感(带明确时间点)
     "time_sensitive": {
         "patterns": [
             r"(今天|明天|后天|下周|下个月).*(必须|一定|截止|deadline)",
@@ -3254,7 +3253,7 @@ URGENT_PATTERNS = {
 
 def check_urgency(content: str) -> tuple[bool, float, str]:
     """
-    检测内容是否为 urgent（需要优先处理）
+    检测内容是否为 urgent(需要优先处理)
 
     返回:
         (is_urgent, importance_score, matched_category)
@@ -3322,8 +3321,8 @@ def add_to_pending(memory_dir, content: str, source: str = "user") -> dict:
 
 def search_pending(query: str, memory_dir=None) -> list:
     """
-    搜索 pending buffer（Hot Store）
-    简单关键词匹配，用于 router_search 的第一优先级
+    搜索 pending buffer(Hot Store)
+    简单关键词匹配,用于 router_search 的第一优先级
     """
     if memory_dir is None:
         memory_dir = get_memory_dir()
@@ -3338,7 +3337,7 @@ def search_pending(query: str, memory_dir=None) -> list:
 
     for record in pending:
         content_lower = record.get("content", "").lower()
-        # 简单匹配：查询词出现在内容中
+        # 简单匹配:查询词出现在内容中
         score = 0
         for word in query_words:
             if word in content_lower:
@@ -3362,21 +3361,21 @@ def search_pending(query: str, memory_dir=None) -> list:
 
 def cmd_mini_consolidate(args):
     """
-    白天轻量检查：只处理 pending buffer
+    白天轻量检查:只处理 pending buffer
 
     流程:
     1. 读取 pending.jsonl
-    2. Phase 2: 筛选（规则 + LLM 兜底）
-    3. Phase 3: 提取（模板 + LLM）
+    2. Phase 2: 筛选(规则 + LLM 兜底)
+    3. Phase 3: 提取(模板 + LLM)
     4. 写入 layer2/active/
     5. 清空 pending.jsonl
-    6. 更新 Layer 1 快照（可选）
+    6. 更新 Layer 1 快照(可选)
     """
     memory_dir = get_memory_dir()
     pending = load_pending(memory_dir)
 
     if not pending:
-        print("📭 Pending buffer 为空，无需处理")
+        print("📭 Pending buffer 为空,无需处理")
         return
 
     print("🔄 Mini-Consolidate 开始")
@@ -3419,7 +3418,7 @@ def cmd_mini_consolidate(args):
     if not kept:
         # 清空 pending
         save_pending(memory_dir, [])
-        print("\n✅ Mini-Consolidate 完成（无有效内容）")
+        print("\n✅ Mini-Consolidate 完成(无有效内容)")
         return
 
     # Phase 3: 提取
@@ -3466,7 +3465,7 @@ def cmd_mini_consolidate(args):
     save_pending(memory_dir, [])
     print("   清空 pending buffer")
 
-    # 更新 QMD 索引（如果可用）
+    # 更新 QMD 索引(如果可用)
     if qmd_available(memory_dir):
         print("\n🔍 更新 QMD 索引")
         try:
@@ -3969,7 +3968,7 @@ def main():
     parser_capture.add_argument("--type", choices=["fact", "belief", "summary"], default="fact", help="记忆类型")
     parser_capture.add_argument("--importance", type=float, default=0.5, help="重要性 (0-1)")
     parser_capture.add_argument("--confidence", type=float, default=0.6, help="置信度 (belief 专用)")
-    parser_capture.add_argument("--entities", default="", help="相关实体，逗号分隔")
+    parser_capture.add_argument("--entities", default="", help="相关实体,逗号分隔")
     parser_capture.set_defaults(func=cmd_capture)
 
     # archive
@@ -3981,7 +3980,7 @@ def main():
     parser_consolidate = subparsers.add_parser("consolidate", help="执行 Consolidation")
     parser_consolidate.add_argument("--force", action="store_true", help="强制执行")
     parser_consolidate.add_argument("--phase", type=int, choices=[0, 1, 2, 3, 4, 5, 6, 7], help="只执行指定阶段")
-    parser_consolidate.add_argument("--input", help="输入文件路径（Phase 1 数据源）")
+    parser_consolidate.add_argument("--input", help="输入文件路径(Phase 1 数据源)")
     parser_consolidate.set_defaults(func=cmd_consolidate)
 
     # rebuild-index
@@ -4021,7 +4020,7 @@ def main():
         parser_view_expired.set_defaults(func=lambda args: cmd_view_expired_log(args, get_memory_dir()))
 
     # v1.2.0 inject 命令
-    parser_inject = subparsers.add_parser("inject", help="动态注入：根据消息检索相关记忆")
+    parser_inject = subparsers.add_parser("inject", help="动态注入:根据消息检索相关记忆")
     parser_inject.add_argument("query", help="用户消息")
     parser_inject.add_argument("--max-tokens", type=int, default=500, help="最大 token 数")
     parser_inject.add_argument("--format", choices=["text", "json"], default="text", help="输出格式")
@@ -4033,7 +4032,7 @@ def main():
     parser_export_qmd.set_defaults(func=cmd_export_qmd)
 
     # v1.2.2: Mini-Consolidate 命令
-    parser_mini = subparsers.add_parser("mini-consolidate", help="白天轻量检查：只处理 pending buffer")
+    parser_mini = subparsers.add_parser("mini-consolidate", help="白天轻量检查:只处理 pending buffer")
     parser_mini.set_defaults(func=cmd_mini_consolidate)
 
     # v1.2.2: 添加到 pending 命令
@@ -4106,7 +4105,7 @@ def main():
     parser_dashboard = subparsers.add_parser("dashboard", help="启动 Web 可视化面板")
     parser_dashboard.add_argument("--host", default="localhost", help="服务器地址")
     parser_dashboard.add_argument("--port", type=int, default=9090, help="服务器端口")
-    parser_dashboard.add_argument("--memory-dir", help="记忆目录路径（优先于 MEMORY_DIR 环境变量）")
+    parser_dashboard.add_argument("--memory-dir", help="记忆目录路径(优先于 MEMORY_DIR 环境变量)")
     parser_dashboard.add_argument("--no-browser", action="store_true", help="不自动打开浏览器")
     parser_dashboard.set_defaults(func=cmd_dashboard)
 
