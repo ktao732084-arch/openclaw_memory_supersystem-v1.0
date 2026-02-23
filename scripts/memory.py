@@ -1,13 +1,21 @@
 #!/usr/bin/env python3
 """
-Memory System v1.1.7 - 三层记忆架构 CLI
-支持 LLM 深度集成 + 访问日志追踪 + 时间敏感记忆 + 实体识别与隔离
+Memory System v1.4.0 - 三层记忆架构 CLI
 
-v1.1.7 改进：
-- LLM 深度集成：语义复杂度检测 + 智能触发 + 失败回退
-- 扩大 LLM 触发区间：0.2~0.5（原 0.2~0.3）
-- LLM 失败回退机制：失败时回退到规则结果，不丢弃
-- API Key 多源获取：环境变量 → 配置文件 → 参数传入
+⚠️  版本管理规范：
+    - 版本号以 git tag 为准，禁止在文件头自封版本
+    - 发布新版本：git tag vX.Y.Z -m "说明" && git push --tags
+    - 当前 tag: v1.4.0
+
+功能模块（按版本）：
+  v1.1.7  三层记忆 + LLM 深度集成 + 实体识别
+  v1.2.x  QMD 集成 + 白天轻量检查 + SQLite 后端
+  v1.3.0  幻觉防御（NoiseFilter + MemoryOperator + ConflictResolver + CacheManager）
+          ScaledBackend + AsyncIndexer（>5000条自动启用）
+  v1.4.0  时序引擎（TemporalQueryEngine + FactEvolutionTracker + EvidenceTracker）
+          ProactiveEngine 接入 consolidation Phase 6.8
+  v1.6.0  向量检索（VectorEmbedding + VectorIndex + HybridSearch）
+"""
 """
 
 import argparse
@@ -195,7 +203,7 @@ def call_llm(prompt, system_prompt=None, max_tokens=500):
 # ============================================================
 
 DEFAULT_CONFIG = {
-    "version": "1.6.0",
+    "version": "1.4.0",
     "decay_rates": {"fact": 0.008, "belief": 0.07, "summary": 0.025},
     "thresholds": {"archive": 0.05, "summary_trigger": 3},
     "token_budget": {"layer1_total": 2000},
