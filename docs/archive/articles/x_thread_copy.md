@@ -120,4 +120,4 @@ github.com/ktao732084-arch/openclaw_memory_supersystem-v1.0
 
 不会写代码不是障碍。AI帮我写代码，我负责设计和决策。
 
-我是作者，一个用跨学科思维理解AI的人。
+我是Ktao，一个用跨学科思维理解AI的人。

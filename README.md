@@ -326,7 +326,7 @@ Phase 1: 收集 ──→ Phase 2: 筛选 ──→ Phase 3: 提取
 - Role: Digital companion
 
 ## Owner
-- Name: [用户]
+- Name: Ktao
 - Context: [专业]
 
 ## Top Rankings (by importance)
@@ -428,7 +428,7 @@ GitHub: https://github.com/ktao732084-arch/openclaw_memory_supersystem-v1.0
 **如果你也在用OpenClaw，或者对AI Agent的记忆系统感兴趣，欢迎交流。**
 如果你也要使用我这个skill 你会怎么调整你个人助手的遗忘速率和权重计算呢。
 
-我是作者，一个用跨学科思维理解AI的人。
+我是Ktao，一个用跨学科思维理解AI的人。
 
 ---
 

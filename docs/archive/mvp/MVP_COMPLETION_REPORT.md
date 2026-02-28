@@ -1,4 +1,4 @@
-# [助手] Memory System v1.0-lite - MVP完成报告
+# Tkao Memory System v1.0-lite - MVP完成报告
 
 > **完成时间**: 2026-02-03
 > **状态**: ✅ MVP核心功能已实现
@@ -94,7 +94,7 @@ python3 /root/.openclaw/memory/test_mvp.py
 
 ```
 ============================================================
-[助手] Memory System MVP Test
+Tkao Memory System MVP Test
 ============================================================
 
 Testing Moltbook Social Tracker

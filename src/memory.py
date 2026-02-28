@@ -304,7 +304,7 @@ EXPLICIT_SIGNALS = {
 # 实体识别模式（v1.1.2 改进：支持正则模式）
 ENTITY_PATTERNS = {
     "person": {
-        "fixed": ["我", "你", "他", "她", "用户", "[用户]", "[助手]"],
+        "fixed": ["我", "你", "他", "她", "用户", "Ktao", "Tkao"],
         "patterns": [
             r"[A-Z][a-z]+",  # 英文人名：John, Mary（移除\b）
         ]
@@ -1630,7 +1630,7 @@ def extract_memory_id_from_snippet(snippet):
     从 QMD 返回的 snippet 中提取 memory_id
     
     格式示例：
-    [f_20260207_a6b928] 用户名字是[用户名]...
+    [f_20260207_a6b928] 用户名字是Ktao...
     """
     match = re.search(r'\[([fbs]_\d{8}_[a-f0-9]+)\]', snippet)
     return match.group(1) if match else None
@@ -2744,8 +2744,8 @@ def cmd_inject(args):
     
     输出格式（text）：
         ## 相关记忆
-        - [fact] 用户名字是[用户名]...
-        - [belief] [用户]认为记忆系统很重要...
+        - [fact] 用户名字是Ktao...
+        - [belief] Ktao认为记忆系统很重要...
     
     输出格式（json）：
         {"direct": [...], "marked": [...], "reference": [...]}

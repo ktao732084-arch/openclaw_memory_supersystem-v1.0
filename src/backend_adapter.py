@@ -209,7 +209,7 @@ def test_backend_adapter(memory_dir: Path):
         
         # 测试搜索
         print("\n3. 测试 SQLite 搜索:")
-        results = backend_sqlite.search_by_entities(['[用户]'], limit=3)
+        results = backend_sqlite.search_by_entities(['Ktao'], limit=3)
         print(f"   找到 {len(results)} 条记忆")
     else:
         print("\n2. SQLite 后端不可用")

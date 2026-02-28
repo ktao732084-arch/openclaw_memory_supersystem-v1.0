@@ -268,11 +268,11 @@ Phase 1: 收集 ──→ Phase 2: 筛选 ──→ Phase 3: 提取
 # Layer 1 Snapshot
 
 ## Identity
-- Name: [助手]
+- Name: Tkao
 - Role: Digital companion
 
 ## Owner
-- Name: [用户]
+- Name: Ktao
 - Context: [专业]
 
 ## Top Rankings (by importance)
@@ -380,7 +380,7 @@ GitHub: https://github.com/ktao732084-arch/openclaw_memory_supersystem-v1.0
 **如果你也在用OpenClaw，或者对AI Agent的记忆系统感兴趣，欢迎交流。**
 如果你也要使用我这个skill 你会怎么调整你个人助手的遗忘速率和权重计算呢。
 
-我是作者，一个用跨学科思维理解AI的人。
+我是Ktao，一个用跨学科思维理解AI的人。
 
 ---
 
@@ -486,7 +486,7 @@ Eye-catching social media cover, bold Chinese text "200刀 48小时" in large ye
 
 **Naro Banana Prompt**：
 ```
-Minimalist logo design combining letter "K" with neural network pattern, clean geometric lines forming brain-like connections, gradient from medical blue to tech purple, "[用户]" text below in modern sans-serif font, tagline "Medical Mind × AI Design", white background, professional personal brand aesthetic, suitable for avatar or watermark
+Minimalist logo design combining letter "K" with neural network pattern, clean geometric lines forming brain-like connections, gradient from medical blue to tech purple, "Ktao" text below in modern sans-serif font, tagline "Medical Mind × AI Design", white background, professional personal brand aesthetic, suitable for avatar or watermark
 ```
 
 ---

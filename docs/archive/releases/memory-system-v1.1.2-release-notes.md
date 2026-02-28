@@ -82,7 +82,7 @@ test_cases = [
     '在Memory-System项目工作',
     '项目_10进度很好',
     'John和Mary在OpenClaw团队',
-    '[用户]在北京'
+    'Ktao在北京'
 ]
 ```
 
@@ -142,7 +142,7 @@ test_cases = [
 - 模式：`项目_\d+`、`[A-Z][a-zA-Z0-9-]+`（如 OpenClaw, Memory-System）
 
 ### Person（人物）
-- 固定：我、你、他、她、用户、[用户]、[助手]
+- 固定：我、你、他、她、用户、Ktao、Tkao
 - 模式：`[A-Z][a-z]+`（如 John, Mary）
 
 ### Organization（组织）
