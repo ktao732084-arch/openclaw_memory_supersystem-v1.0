@@ -379,3 +379,69 @@ GitHub: https://github.com/ktao732084-arch/openclaw_memory_supersystem-v1.0
 我是Ktao，一个试图用医学生思维理解AI的人。
 
 ---
+
+## 后续版本更新记录
+
+### v1.2.0 (2026-02-12) — 废话过滤 + 动态注入
+
+- 废话前置过滤器：NOISE_PATTERNS 规则匹配 + `is_noise()` 函数，在 Phase 2 之前拦截无意义内容
+- `inject` 命令：根据当前对话内容动态检索相关记忆，按需注入上下文
+- QMD 语义搜索集成：`qmd_search` + `router_search` 增强，支持关键词 + 语义混合检索
+
+### v1.2.2 (2026-02-12) — 白天轻量检查
+
+- Mini-Consolidate：白天只处理 pending buffer，不做全量整合
+- `pending.jsonl` 缓冲区：实时收集对话内容，等待 consolidation 处理
+- Hot Store 搜索：优先从活跃池检索，减少冷数据干扰
+
+### v1.2.3 — QMD 自动更新
+
+- `export-qmd --auto-reload`：导出记忆后自动更新 QMD 索引，无需手动操作
+
+### v1.2.4 (2026-02-14) — SQLite 后端
+
+- 用 SQLite 替换 JSONL 作为主存储，查询性能大幅提升
+- WAL 模式 + 并发安全
+- 完整的迁移工具：`migrate_jsonl_to_sqlite()`
+
+### v1.3.0 (2026-02-14) — Memory Operator + 冲突消解
+
+- Memory Operator：ADD/UPDATE/DELETE/NOOP 四种操作，92.9% 准确率
+- 冲突消解协议：检测矛盾记忆，标记冲突而非静默覆盖
+- 虚假记忆过滤：防止 Agent 把"猜测"当"事实"写入
+- 全模块接入 memory.py：NoiseFilter + MemoryOperator + ConflictResolver + CacheManager，所有模块有降级兜底
+
+### v1.4.0 (2026-02-23) — 时序引擎
+
+- TemporalQueryEngine：回答"上次 X 是什么时候""X 发生过几次"等时序问题
+- FactEvolutionTracker：追踪事实随时间的演变（如"用户的项目从 A 变成了 B"）
+- EvidenceTracker：为每条记忆维护证据链
+- `router_search` 时序前置：检测到时序类查询时优先走时序引擎
+
+### 当前架构 (v1.4.0)
+
+```
+memory.py                    # 主入口 + CLI
+│
+├── 存储层
+│   ├── sqlite_backend.py    # SQLite 主存储
+│   ├── backend_adapter.py   # 存储抽象层
+│   └── scaled_backend.py    # 阈值缩放
+│
+├── 检索层
+│   ├── hybrid_search.py     # 混合检索（关键词 + 向量）
+│   ├── sharded_index.py     # 分片向量索引
+│   ├── async_indexer.py     # 异步索引更新
+│   └── cache_manager.py     # 多级缓存
+│
+├── 智能层
+│   ├── noise_filter.py      # 废话过滤
+│   ├── memory_operator.py   # CRUD 操作器
+│   ├── conflict_resolver.py # 冲突检测与消解
+│   ├── temporal_engine.py   # 时序引擎
+│   ├── proactive_engine.py  # 主动记忆引擎
+│   └── proactive_executor.py
+│
+└── 数据采集
+    └── collect_from_sessions.py
+```
