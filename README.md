@@ -371,12 +371,6 @@ python memory.py snapshot
 
 GitHub: https://github.com/ktao732084-arch/openclaw_memory_supersystem-v1.0
 
-### 未来计划
-
-- [ ] 接入OpenClaw session数据，实现真正的自动记忆
-- [ ] 优化检索算法，支持语义搜索
-- [ ] 添加可视化面板，让记忆系统"可见"
-
 ---
 
 **如果你也在用OpenClaw，或者对AI Agent的记忆系统感兴趣，欢迎交流。**
