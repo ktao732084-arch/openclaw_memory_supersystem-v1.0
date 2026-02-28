@@ -40,7 +40,7 @@ def benchmark_entity_search(memory_dir: Path, iterations: int = 50):
     print(f"\n📊 实体搜索性能测试 ({iterations} 次)")
     print("=" * 60)
     
-    test_entities = ['Ktao', '用户', '记忆系统']
+    test_entities = ['[用户]', '用户', '记忆系统']
     
     # 测试 SQLite
     print("\n1. SQLite 后端:")

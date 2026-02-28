@@ -2,7 +2,7 @@
 
 > 分析时间: 2026-02-11
 > 基于: memory.py (2413行) + v1.1模块 (5492行总计)
-> 分析者: Tkao
+> 分析者: [助手]
 
 ---
 
@@ -219,7 +219,7 @@ def router_search(query, memory_dir=None):
    - 应该：OpenClaw → memory_search → router_search()（动态）
 
 3. **实现路径**
-   - 方案 A: 修改 AGENTS.md，让 Tkao 主动调用 `memory.py search`
+   - 方案 A: 修改 AGENTS.md，让 [助手] 主动调用 `memory.py search`
    - 方案 B: 让 OpenClaw 的 memory_search 工具调用我们的 router_search
    - 方案 C: 写一个 hook 脚本，在每次对话前动态生成注入内容
 

@@ -1,4 +1,4 @@
-# 🎉 Tkao Memory System v1.0-lite - MVP完成！
+# 🎉 [助手] Memory System v1.0-lite - MVP完成！
 
 > **完成时间**: 2026-02-03 晚上
 > **状态**: ✅ 核心功能全部实现并测试通过
@@ -113,7 +113,7 @@ python3 memory/test_mvp.py
 **输出**:
 ```
 ============================================================
-Tkao Memory System MVP Test
+[助手] Memory System MVP Test
 ============================================================
 
 Testing Moltbook Social Tracker

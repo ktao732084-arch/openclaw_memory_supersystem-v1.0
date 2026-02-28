@@ -107,7 +107,7 @@ def mark_dirty(memory_id):
 ```markdown
 # 当前 snapshot.md 内容（4.7KB，约 1500 tokens）
 - 用户名字是[用户名]...
-- Tkao是Ktao的数字镜像...
+- [助手]是[用户]的数字镜像...
 - 我去，真不行了，困死了啊  ← 这条和当前对话有关吗？
 - 个人项目：个人医学AI助手... ← 聊代码时需要这个吗？
 ```
@@ -335,6 +335,6 @@ def rule_filter_enhanced(segment):
 
 ---
 
-*文档维护: Tkao*
+*文档维护: [助手]*
 *最后更新: 2026-02-11*
 *感谢 Crabby 的深度剖析 🦀*

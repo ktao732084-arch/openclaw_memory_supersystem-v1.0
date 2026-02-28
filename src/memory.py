@@ -304,7 +304,7 @@ EXPLICIT_SIGNALS = {
 # 实体识别模式（v1.1.2 改进：支持正则模式）
 ENTITY_PATTERNS = {
     "person": {
-        "fixed": ["我", "你", "他", "她", "用户", "Ktao", "Tkao"],
+        "fixed": ["我", "你", "他", "她", "用户", "[用户]", "[助手]"],
         "patterns": [
             r"[A-Z][a-z]+",  # 英文人名：John, Mary（移除\b）
         ]
@@ -2745,7 +2745,7 @@ def cmd_inject(args):
     输出格式（text）：
         ## 相关记忆
         - [fact] 用户名字是[用户名]...
-        - [belief] Ktao认为记忆系统很重要...
+        - [belief] [用户]认为记忆系统很重要...
     
     输出格式（json）：
         {"direct": [...], "marked": [...], "reference": [...]}

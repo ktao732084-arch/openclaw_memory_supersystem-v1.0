@@ -1,6 +1,6 @@
-# 斥资200刀、耗时48小时：一个大三医学生如何用神经科学重塑OpenClaw的记忆大脑
+# 斥资200刀、耗时48小时：一个[专业]学生如何用神经科学重塑OpenClaw的记忆大脑
 
-> **写在前面**：这篇文章记录了我作为一个临床医学大三学生，如何在48小时内设计并实现了一套完整的AI Agent记忆系统。没有CS背景，没有大厂经验，只有医学训练出的逻辑思维和对神经科学的一点理解。
+> **写在前面**：这篇文章记录了我作为一个[专业]学生，如何在48小时内设计并实现了一套完整的AI Agent记忆系统。没有CS背景，没有大厂经验，只有医学训练出的逻辑思维和对神经科学的一点理解。
 
 ---
 
@@ -27,7 +27,7 @@
 
 > **"老板，你这是在降维打击！"**
 >
-> 你在用"大三医学生"那套经过严密逻辑训练过的、模拟生物进化的思维，去降维打击那些只会写 if-else 的纯码农。
+> 你在用"[专业]学生"那套经过严密逻辑训练过的、模拟生物进化的思维，去降维打击那些只会写 if-else 的纯码农。
 
 他具体指出了三个"含金量"：
 
@@ -55,7 +55,7 @@
 
 ### 身份背景
 
-我是一名临床医学专业的大三学生。没有计算机背景，代码能力大概⭐（满分五星），但逻辑思维能力还行——毕竟医学训练的核心就是**鉴别诊断**：从一堆症状里抽丝剥茧，找到那个最可能的病因。
+我是一名[专业]学生。没有计算机背景，代码能力大概⭐（满分五星），但逻辑思维能力还行——毕竟医学训练的核心就是**鉴别诊断**：从一堆症状里抽丝剥茧，找到那个最可能的病因。
 
 ### 痛点来源
 
@@ -268,12 +268,12 @@ Phase 1: 收集 ──→ Phase 2: 筛选 ──→ Phase 3: 提取
 # Layer 1 Snapshot
 
 ## Identity
-- Name: Tkao
+- Name: [助手]
 - Role: Digital companion
 
 ## Owner
-- Name: Ktao
-- Context: 临床医学大三
+- Name: [用户]
+- Context: [专业]
 
 ## Top Rankings (by importance)
 1. [Fact] 用户正在开发AI项目 (0.95)
@@ -380,7 +380,7 @@ GitHub: https://github.com/ktao732084-arch/openclaw_memory_supersystem-v1.0
 **如果你也在用OpenClaw，或者对AI Agent的记忆系统感兴趣，欢迎交流。**
 如果你也要使用我这个skill 你会怎么调整你个人助手的遗忘速率和权重计算呢。
 
-我是Ktao，一个试图用医学生思维理解AI的人。
+我是作者，一个用跨学科思维理解AI的人。
 
 ---
 
@@ -486,7 +486,7 @@ Eye-catching social media cover, bold Chinese text "200刀 48小时" in large ye
 
 **Naro Banana Prompt**：
 ```
-Minimalist logo design combining letter "K" with neural network pattern, clean geometric lines forming brain-like connections, gradient from medical blue to tech purple, "Ktao" text below in modern sans-serif font, tagline "Medical Mind × AI Design", white background, professional personal brand aesthetic, suitable for avatar or watermark
+Minimalist logo design combining letter "K" with neural network pattern, clean geometric lines forming brain-like connections, gradient from medical blue to tech purple, "[用户]" text below in modern sans-serif font, tagline "Medical Mind × AI Design", white background, professional personal brand aesthetic, suitable for avatar or watermark
 ```
 
 ---
