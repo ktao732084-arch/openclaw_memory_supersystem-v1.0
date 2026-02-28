@@ -276,7 +276,7 @@ Phase 1: 收集 ──→ Phase 2: 筛选 ──→ Phase 3: 提取
 -�Context: [专业]
 
 ## Top Rankings (by importance)
-1. [Fact] 用户正在开发个人项目 (0.95)
+1. [Fact] 用户正在开发[个人项目] (0.95)
 2. [Fact] 用户对神经科学感兴趣 (0.88)
 3. [Belief] 用户可能在准备考研 (0.65)
 
