@@ -85,7 +85,7 @@ QMD (Quick Memory Dump) 是 OpenClaw 内置的本地优先搜索引擎：
 │  格式示例：                                                  │
 │  # Facts                                                    │
 │  ## f_20260207_a6b928 [importance=1.0]                      │
-│  用户名字是某用户，称呼Ktao，某大学临床医学大三学生    │
+│  用户名字是[用户名]，称呼[昵称]，[学校][专业]学生    │
 │  entities: Ktao, 用户                                       │
 │  ---                                                        │
 └─────────────────────────────────────────────────────────────┘
@@ -299,7 +299,7 @@ def extract_memory_id_from_snippet(snippet):
     
     QMD 返回的 snippet 格式：
     ## f_20260207_a6b928 [score=0.99, imp=1.0]
-    用户名字是某用户...
+    用户名字是[用户名]...
     """
     import re
     match = re.search(r'## ([fbs]_\d{8}_[a-f0-9]+)', snippet)

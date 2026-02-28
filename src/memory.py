@@ -1630,7 +1630,7 @@ def extract_memory_id_from_snippet(snippet):
     从 QMD 返回的 snippet 中提取 memory_id
     
     格式示例：
-    [f_20260207_a6b928] 用户名字是某用户...
+    [f_20260207_a6b928] 用户名字是[用户名]...
     """
     match = re.search(r'\[([fbs]_\d{8}_[a-f0-9]+)\]', snippet)
     return match.group(1) if match else None
@@ -2744,7 +2744,7 @@ def cmd_inject(args):
     
     输出格式（text）：
         ## 相关记忆
-        - [fact] 用户名字是某用户...
+        - [fact] 用户名字是[用户名]...
         - [belief] Ktao认为记忆系统很重要...
     
     输出格式（json）：
