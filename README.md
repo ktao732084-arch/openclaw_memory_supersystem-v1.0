@@ -1,8 +1,60 @@
+# Memory System — AI Agent 持久化记忆系统
+
+> 一个受神经科学启发的 AI Agent 记忆系统，支持三层存储、混合检索、自动衰减和记忆整合。
+
+## 📋 版本更新记录
+
+| 版本 | 日期 | 更新内容 |
+|------|------|----------|
+| v1.0.0 | 2026-02-03 | 初始版本：三层记忆架构（工作记忆/长期记忆/事件日志）、7 阶段 Consolidation、Fact/Belief/Summary 分类、自动衰减机制、置信度标注 |
+| v1.1.1 | 2026-02-05 | 分词优化 + 冲突柔性降权 |
+| v1.1.2 | 2026-02-05 | 实体识别优化（支持正则模式） |
+| v1.1.3 | 2026-02-05 | LLM 兜底机制：规则优先 + LLM 兜底的混合动力架构 |
+| v1.1.5 | 2026-02-05 | 实体系统增强（v1_1_5_entity_system） |
+| v1.1.7 | 2026-02-06 | LLM 深度集成 + 语义复杂度检测 + 失败回退机制 |
+| v1.2.0 | 2026-02-12 | 废话前置过滤器（NOISE_PATTERNS）+ `inject` 动态注入命令 + QMD 语义搜索集成 |
+| v1.2.1 | 2026-02-12 | QMD 集成增强（Crabby 建议），`qmd_search` + `router_search` 混合检索 |
+| v1.2.2 | 2026-02-12 | Mini-Consolidate 白天轻量检查 + pending.jsonl 缓冲区 + Hot Store 优先检索 |
+| v1.2.3 | 2026-02-13 | `export-qmd --auto-reload` 自动更新 QMD 索引 |
+| v1.2.4 | 2026-02-14 | SQLite 后端替换 JSONL 主存储，WAL 模式 + 并发安全 + 迁移工具 |
+| v1.3.0 | 2026-02-14 | Memory Operator（ADD/UPDATE/DELETE/NOOP，92.9% 准确率）+ 冲突消解协议 + 虚假记忆过滤 + 全模块降级兜底 |
+| v1.4.0 | 2026-02-23 | 时序引擎（TemporalQueryEngine + FactEvolutionTracker + EvidenceTracker）+ 时序查询前置路由 |
+
+## 当前架构 (v1.4.0)
+
+```
+memory.py                    # 主入口 + CLI
+│
+├── 存储层
+│   ├── sqlite_backend.py    # SQLite 主存储
+│   ├── backend_adapter.py   # 存储抽象层
+│   └── scaled_backend.py    # 阈值缩放
+│
+├── 检索层
+│   ├── hybrid_search.py     # 混合检索（关键词 + 向量）
+│   ├── sharded_index.py     # 分片向量索引
+│   ├── async_indexer.py     # 异步索引更新
+│   └── cache_manager.py     # 多级缓存
+│
+├── 智能层
+│   ├── noise_filter.py      # 废话过滤
+│   ├── memory_operator.py   # CRUD 操作器
+│   ├── conflict_resolver.py # 冲突检测与消解
+│   ├── temporal_engine.py   # 时序引擎
+│   ├── proactive_engine.py  # 主动记忆引擎
+│   └── proactive_executor.py
+│
+└── 数据采集
+    └── collect_from_sessions.py
+```
+
+---
+
 # 斥资200刀、耗时48小时：一个大三医学生如何用神经科学重塑OpenClaw的记忆大脑
 
 > **写在前面**：这篇文章记录了我作为一个临床医学大三学生，如何在48小时内设计并实现了一套完整的AI Agent记忆系统。没有CS背景，没有大厂经验，只有医学训练出的逻辑思维和对神经科学的一点理解。
 >
-> **最新更新 (v1.1.3)**: 实现 LLM 兜底机制，规则优先 + LLM 兜底的混合动力架构。详见 [CHANGELOG.md](CHANGELOG.md)
+> **当前版本: v1.4.0** — 详见上方版本更新记录
 
 ---
 
@@ -380,68 +432,3 @@ GitHub: https://github.com/ktao732084-arch/openclaw_memory_supersystem-v1.0
 
 ---
 
-## 后续版本更新记录
-
-### v1.2.0 (2026-02-12) — 废话过滤 + 动态注入
-
-- 废话前置过滤器：NOISE_PATTERNS 规则匹配 + `is_noise()` 函数，在 Phase 2 之前拦截无意义内容
-- `inject` 命令：根据当前对话内容动态检索相关记忆，按需注入上下文
-- QMD 语义搜索集成：`qmd_search` + `router_search` 增强，支持关键词 + 语义混合检索
-
-### v1.2.2 (2026-02-12) — 白天轻量检查
-
-- Mini-Consolidate：白天只处理 pending buffer，不做全量整合
-- `pending.jsonl` 缓冲区：实时收集对话内容，等待 consolidation 处理
-- Hot Store 搜索：优先从活跃池检索，减少冷数据干扰
-
-### v1.2.3 — QMD 自动更新
-
-- `export-qmd --auto-reload`：导出记忆后自动更新 QMD 索引，无需手动操作
-
-### v1.2.4 (2026-02-14) — SQLite 后端
-
-- 用 SQLite 替换 JSONL 作为主存储，查询性能大幅提升
-- WAL 模式 + 并发安全
-- 完整的迁移工具：`migrate_jsonl_to_sqlite()`
-
-### v1.3.0 (2026-02-14) — Memory Operator + 冲突消解
-
-- Memory Operator：ADD/UPDATE/DELETE/NOOP 四种操作，92.9% 准确率
-- 冲突消解协议：检测矛盾记忆，标记冲突而非静默覆盖
-- 虚假记忆过滤：防止 Agent 把"猜测"当"事实"写入
-- 全模块接入 memory.py：NoiseFilter + MemoryOperator + ConflictResolver + CacheManager，所有模块有降级兜底
-
-### v1.4.0 (2026-02-23) — 时序引擎
-
-- TemporalQueryEngine：回答"上次 X 是什么时候""X 发生过几次"等时序问题
-- FactEvolutionTracker：追踪事实随时间的演变（如"用户的项目从 A 变成了 B"）
-- EvidenceTracker：为每条记忆维护证据链
-- `router_search` 时序前置：检测到时序类查询时优先走时序引擎
-
-### 当前架构 (v1.4.0)
-
-```
-memory.py                    # 主入口 + CLI
-│
-├── 存储层
-│   ├── sqlite_backend.py    # SQLite 主存储
-│   ├── backend_adapter.py   # 存储抽象层
-│   └── scaled_backend.py    # 阈值缩放
-│
-├── 检索层
-│   ├── hybrid_search.py     # 混合检索（关键词 + 向量）
-│   ├── sharded_index.py     # 分片向量索引
-│   ├── async_indexer.py     # 异步索引更新
-│   └── cache_manager.py     # 多级缓存
-│
-├── 智能层
-│   ├── noise_filter.py      # 废话过滤
-│   ├── memory_operator.py   # CRUD 操作器
-│   ├── conflict_resolver.py # 冲突检测与消解
-│   ├── temporal_engine.py   # 时序引擎
-│   ├── proactive_engine.py  # 主动记忆引擎
-│   └── proactive_executor.py
-│
-└── 数据采集
-    └── collect_from_sessions.py
-```
